@@ -25,15 +25,20 @@ interface LeadProfileProps {
 }
 
 export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
+
+  type StatusType = "New" | "Contacted" | "Qualified" | "Nurturing" | "Site Visit Scheduled" | "Site Visited" | "Negotiation" | "Converted" | "Lost" | "Hold";
+
   const { user } = useAuth();
   const permissionService = PermissionService.getInstance();
   const [agents, setAgents] = useState<any[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
   
   const [newNote, setNewNote] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState(lead.status);
+  const [selectedStatus, setSelectedStatus] = useState<StatusType>(lead.status as StatusType);
   const [selectedAgent, setSelectedAgent] = useState(lead.assignedAgent || 'unassigned');
   const [communicationActivities, setCommunicationActivities] = useState<CommunicationActivity[]>([]);
+
+  
 
   // Fetch agents (users with role 'agent') when component mounts
   useEffect(() => {
@@ -323,9 +328,9 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <div className="text-sm font-medium text-gray-500 mb-2">Status</div>
-                    <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                    <Select value={selectedStatus} onValueChange={(value: StatusType) => setSelectedStatus(value)}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
                         {['New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled', 
