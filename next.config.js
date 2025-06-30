@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const path = require('path'); // Import path module
+
 const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
@@ -23,7 +25,7 @@ const nextConfig = {
         buildDependencies: {
           config: [__filename],
         },
-        cacheDirectory: '.next/cache/webpack',
+        cacheDirectory: path.resolve(__dirname, '.next/cache/webpack'), // Use an absolute path
         compression: 'gzip',
         hashAlgorithm: 'xxhash64',
       };
