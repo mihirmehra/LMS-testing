@@ -101,8 +101,18 @@ export default function Home() {
       return true;
     });
 
+    type LeadScore = 'High' | 'Medium' | 'Low';
+
+    const scoreOrder: Record<LeadScore, number> = {
+      High: 3,
+      Medium: 2,
+      Low: 1,
+    };
+
     // Sort leads
     filtered.sort((a, b) => {
+      const scoreA = a.leadScore as LeadScore; // Ensure leadScore is of type LeadScore
+      const scoreB = b.leadScore as LeadScore;
       switch (sortBy) {
         case 'created-desc':
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -113,11 +123,9 @@ export default function Home() {
         case 'name-desc':
           return b.name.localeCompare(a.name);
         case 'score-high':
-          const scoreOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
-          return scoreOrder[b.leadScore] - scoreOrder[a.leadScore];
+          return scoreOrder[scoreB] - scoreOrder[scoreA];
         case 'score-low':
-          const scoreOrderLow = { 'High': 3, 'Medium': 2, 'Low': 1 };
-          return scoreOrderLow[a.leadScore] - scoreOrderLow[b.leadScore];
+          return scoreOrder[scoreA] - scoreOrder[scoreB];
         default:
           return 0;
       }
