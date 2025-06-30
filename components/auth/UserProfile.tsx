@@ -55,16 +55,17 @@ export function UserProfile() {
   const [preferences, setPreferences] = useState({
     theme: user?.preferences?.theme || 'system',
     notifications: {
-      email: user?.preferences?.notifications?.email || true,
-      push: user?.preferences?.notifications?.push || true,
-      leadUpdates: user?.preferences?.notifications?.leadUpdates || true,
-      taskReminders: user?.preferences?.notifications?.taskReminders || true,
+      email: user?.preferences?.notifications?.email ?? true, // Use nullish coalescing to ensure a default value
+      push: user?.preferences?.notifications?.push ?? true,
+      leadUpdates: user?.preferences?.notifications?.leadUpdates ?? true,
+      taskReminders: user?.preferences?.notifications?.taskReminders ?? true,
     },
     dashboard: {
       defaultView: user?.preferences?.dashboard?.defaultView || 'leads',
       leadsPerPage: user?.preferences?.dashboard?.leadsPerPage || 10,
     },
   });
+
 
   const calendarService = GoogleCalendarService.getInstance();
 
