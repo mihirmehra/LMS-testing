@@ -173,7 +173,7 @@ export class LeadsAPI {
         { 
           $push: { activities: newActivity },
           $set: { updatedAt: now, lastContacted: now }
-        },
+        }, 
         { returnDocument: 'after' }
       );
 
