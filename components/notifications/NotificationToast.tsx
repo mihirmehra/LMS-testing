@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { ForwardRefExoticComponent, RefAttributes, useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useNotifications } from '@/hooks/useNotifications';
 import { Notification } from '@/types/notification';
-import { Bell, X, Calendar, Clock, User, Settings, CheckCircle2 } from 'lucide-react';
+import { Bell, X, Calendar, Clock, User, Settings, CheckCircle2, LucideProps } from 'lucide-react';
 
 export function NotificationToast() {
   const { notifications } = useNotifications();
@@ -28,19 +28,27 @@ export function NotificationToast() {
     setVisibleNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  const getNotificationIcon = (type: Notification['type']) => {
-    const icons = {
-      meeting: Calendar,
-      reminder: Clock,
-      lead_update: User,
-      task: CheckCircle2,
-      system: Settings,
-      calendar: Calendar,
-    };
-    const Icon = icons[type] || Bell;
+  type NotificationType = 'meeting' | 'reminder' | 'lead_update' | 'task' | 'system' | 'calendar';
+
+  interface Icons {
+    [key: string]: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
+  }
+
+  const icons: Icons = {
+    meeting: Calendar,
+    reminder: Clock,
+    lead_update: User,
+    task: CheckCircle2,
+    system: Settings,
+    calendar: Calendar,
+  };
+
+  const getNotificationIcon = (type: string) => {
+    const Icon = icons[type] || Bell; // Now it accepts any string
     return <Icon className="h-4 w-4" />;
   };
 
+ 
   if (visibleNotifications.length === 0) return null;
 
   return (
