@@ -38,19 +38,30 @@ export default function NotificationsPage() {
     deleteNotification,
     loading 
   } = useNotifications();
+
+  type Preferences = {
+    emailNotifications: boolean;
+    pushNotifications: boolean;
+    leadUpdates: boolean;
+    taskReminders: boolean;
+    meetingReminders: boolean;
+    systemAlerts: boolean;
+  };
   
   const [filter, setFilter] = useState<'all' | 'unread' | 'meetings' | 'tasks' | 'system'>('all');
   const [selectedNotifications, setSelectedNotifications] = useState<string[]>([]);
 
   // Notification preferences state
-  const [preferences, setPreferences] = useState({
-    emailNotifications: user?.preferences?.notifications?.email || true,
-    pushNotifications: user?.preferences?.notifications?.push || true,
-    leadUpdates: user?.preferences?.notifications?.leadUpdates || true,
-    taskReminders: user?.preferences?.notifications?.taskReminders || true,
+  const [preferences, setPreferences] = useState<Preferences>({
+    emailNotifications: user?.preferences?.notifications?.email ?? true,
+    pushNotifications: user?.preferences?.notifications?.push ?? true,
+    leadUpdates: user?.preferences?.notifications?.leadUpdates ?? true,
+    taskReminders: user?.preferences?.notifications?.taskReminders ?? true,
     meetingReminders: true,
     systemAlerts: true,
   });
+
+const [leadsPerPage, setLeadsPerPage] = useState(10);
 
   const filteredNotifications = notifications.filter(notification => {
     switch (filter) {
@@ -497,6 +508,21 @@ export default function NotificationsPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
+                        <Label>Push Notifications</Label>
+                        <p className="text-sm text-gray-600">Receive notifications via push notifications</p>
+                      </div>
+                      <Switch
+                        checked={preferences.pushNotifications}
+                        onCheckedChange={(checked) => 
+                          setPreferences(prev => ({
+                            ...prev,
+                            pushNotifications: checked
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
                         <Label>Lead Updates</Label>
                         <p className="text-sm text-gray-600">Get notified when leads are updated</p>
                       </div>
@@ -525,6 +551,36 @@ export default function NotificationsPage() {
                         }
                       />
                     </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>Meeting Reminders</Label>
+                        <p className="text-sm text-gray-600">Receive reminders for upcoming meetings</p>
+                      </div>
+                      <Switch
+                        checked={preferences.meetingReminders}
+                        onCheckedChange={(checked) => 
+                          setPreferences(prev => ({
+                            ...prev,
+                            meetingReminders: checked
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>System Alerts</Label>
+                        <p className="text-sm text-gray-600">Receive system alerts</p>
+                      </div>
+                      <Switch
+                        checked={preferences.systemAlerts}
+                        onCheckedChange={(checked) => 
+                          setPreferences(prev => ({
+                            ...prev,
+                            systemAlerts: checked
+                          }))
+                        }
+                      />
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -543,7 +599,8 @@ export default function NotificationsPage() {
                         type="number"
                         min="5"
                         max="50"
-                        defaultValue="10"
+                        value={leadsPerPage}
+                        onChange={(e) => setLeadsPerPage(Number(e.target.value))}
                         className="w-24"
                       />
                     </div>
