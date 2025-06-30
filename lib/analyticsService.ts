@@ -61,7 +61,7 @@ export class AnalyticsService {
 
   // Lead Source Analysis - filtered by user
   generateLeadSourceAnalytics(leads: Lead[], filters?: ReportFilters, user?: User | null): LeadSourceAnalytics[] {
-    const userFilteredLeads = this.filterLeadsForUser(leads, user);
+    const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
     const filteredLeads = this.applyFilters(userFilteredLeads, filters);
     const sourceMap = new Map<string, Lead[]>();
 
@@ -102,7 +102,7 @@ export class AnalyticsService {
 
   // Agent Performance Analysis - filtered by user
   generateAgentPerformance(leads: Lead[], agents: Agent[], filters?: ReportFilters, user?: User | null): AgentPerformance[] {
-    const userFilteredLeads = this.filterLeadsForUser(leads, user);
+    const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
     const filteredLeads = this.applyFilters(userFilteredLeads, filters);
     
     // Filter agents based on user role
@@ -172,7 +172,7 @@ export class AnalyticsService {
 
   // Lead Status Funnel Analysis - filtered by user
   generateLeadStatusFunnel(leads: Lead[], filters?: ReportFilters, user?: User | null): LeadStatusFunnel[] {
-    const userFilteredLeads = this.filterLeadsForUser(leads, user);
+    const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
     const filteredLeads = this.applyFilters(userFilteredLeads, filters);
     const statusOrder = [
       'New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled', 
@@ -206,7 +206,7 @@ export class AnalyticsService {
 
   // Conversion Metrics - filtered by user
   generateConversionMetrics(leads: Lead[], filters?: ReportFilters, user?: User | null): ConversionMetrics {
-    const userFilteredLeads = this.filterLeadsForUser(leads, user);
+    const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
     const filteredLeads = this.applyFilters(userFilteredLeads, filters);
     const totalLeads = filteredLeads.length;
     const convertedLeads = filteredLeads.filter(lead => lead.status === 'Converted').length;
@@ -259,7 +259,7 @@ export class AnalyticsService {
 
   // Activity Report - filtered by user
   generateActivityReport(leads: Lead[], agentId?: string, period: 'daily' | 'weekly' | 'monthly' = 'monthly', user?: User | null): ActivityReport {
-    const userFilteredLeads = this.filterLeadsForUser(leads, user);
+    const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
     
     // For agents, only show their own activities
     let filteredLeads = userFilteredLeads;
@@ -316,7 +316,7 @@ export class AnalyticsService {
 
   // Dashboard Metrics - filtered by user
   generateDashboardMetrics(leads: Lead[], user?: User | null): DashboardMetrics {
-    const userFilteredLeads = this.filterLeadsForUser(leads, user);
+    const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
