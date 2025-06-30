@@ -13,18 +13,27 @@ export class LeadsAPI {
       const collection = await this.getCollection();
       const leads = await collection.find({}).sort({ createdAt: -1 }).toArray();
       
-      return leads.map(lead => ({
-        ...lead,
-        id: lead._id.toString(),
-        _id: undefined,
-        createdAt: new Date(lead.createdAt),
-        updatedAt: new Date(lead.updatedAt),
-        lastContacted: lead.lastContacted ? new Date(lead.lastContacted) : undefined,
-        activities: lead.activities?.map((activity: any) => ({
-          ...activity,
-          date: new Date(activity.date)
-        })) || []
-      })) as Lead[];
+      return leads.map(lead => {
+        const {
+          _id,
+          createdAt,
+          updatedAt,
+          lastContacted,
+          activities,
+          ...rest
+        } = lead;
+        return {
+          ...rest,
+          id: _id.toString(),
+          createdAt: new Date(createdAt),
+          updatedAt: new Date(updatedAt),
+          lastContacted: lastContacted ? new Date(lastContacted) : undefined,
+          activities: activities?.map((activity: any) => ({
+            ...activity,
+            date: new Date(activity.date)
+          })) || []
+        } as Lead;
+      });
     } catch (error) {
       console.error('Error fetching leads:', error);
       throw new Error('Failed to fetch leads from database');
@@ -42,10 +51,11 @@ export class LeadsAPI {
       
       if (!lead) return null;
       
+      // Exclude _id from the returned object and ensure all Lead fields are present
+      const { _id, ...rest } = lead;
       return {
-        ...lead,
-        id: lead._id.toString(),
-        _id: undefined,
+        ...rest,
+        id: _id.toString(),
         createdAt: new Date(lead.createdAt),
         updatedAt: new Date(lead.updatedAt),
         lastContacted: lead.lastContacted ? new Date(lead.lastContacted) : undefined,
@@ -110,10 +120,10 @@ export class LeadsAPI {
         throw new Error('Lead not found');
       }
 
+      const { _id, ...rest } = result;
       return {
-        ...result,
-        id: result._id.toString(),
-        _id: undefined,
+        ...rest,
+        id: _id.toString(),
         createdAt: new Date(result.createdAt),
         updatedAt: new Date(result.updatedAt),
         lastContacted: result.lastContacted ? new Date(result.lastContacted) : undefined,
@@ -171,10 +181,10 @@ export class LeadsAPI {
         throw new Error('Lead not found');
       }
 
+      const { _id, ...rest } = result;
       return {
-        ...result,
-        id: result._id.toString(),
-        _id: undefined,
+        ...rest,
+        id: _id.toString(),
         createdAt: new Date(result.createdAt),
         updatedAt: new Date(result.updatedAt),
         lastContacted: result.lastContacted ? new Date(result.lastContacted) : undefined,

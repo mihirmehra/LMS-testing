@@ -13,11 +13,13 @@ export class AgentsAPI {
       const collection = await this.getCollection();
       const agents = await collection.find({ active: true }).sort({ name: 1 }).toArray();
       
-      return agents.map(agent => ({
-        ...agent,
-        id: agent._id.toString(),
-        _id: undefined
-      })) as Agent[];
+      return agents.map(agent => {
+        const { _id, ...rest } = agent; // Destructure to omit _id
+        return {
+          ...rest,
+          id: _id.toString() // Assign id from _id
+        } as Agent; // Ensure the returned object matches the Agent type
+      });
     } catch (error) {
       console.error('Error fetching agents:', error);
       throw new Error('Failed to fetch agents from database');
@@ -81,11 +83,17 @@ export class AgentsAPI {
         throw new Error('Agent not found');
       }
 
-      return {
-        ...result,
-        id: result._id.toString(),
-        _id: undefined
-      } as Agent;
+      // Return the updated agent object
+      const updatedAgent = {
+        ...result.value,
+        id: result.value._id.toString(), // Convert _id to string for id
+      };
+
+      // Omit _id from the returned object
+      const { _id, ...agentWithoutId } = updatedAgent;
+
+      return agentWithoutId as Agent; // Ensure the returned object matches the Agent type
+      
     } catch (error) {
       console.error('Error updating agent:', error);
       throw new Error('Failed to update agent');

@@ -17,13 +17,15 @@ export class NotificationsAPI {
         .limit(50)
         .toArray();
       
-      return notifications.map(notification => ({
-        ...notification,
-        id: notification._id.toString(),
-        _id: undefined,
-        createdAt: new Date(notification.createdAt),
-        scheduledFor: notification.scheduledFor ? new Date(notification.scheduledFor) : undefined,
-      })) as Notification[];
+      return notifications.map(notification => {
+        const { _id, ...rest } = notification;
+        return {
+          ...rest,
+          id: _id.toString(),
+          createdAt: new Date(notification.createdAt),
+          scheduledFor: notification.scheduledFor ? new Date(notification.scheduledFor) : undefined,
+        };
+      }) as Notification[];
     } catch (error) {
       console.error('Error fetching notifications:', error);
       return [];
@@ -133,7 +135,7 @@ export class NotificationsAPI {
 
       return await this.createNotification({
         userId,
-        type: 'meeting',
+        type: 'task_reminder',
         title: 'Upcoming Meeting',
         message: `Meeting "${eventTitle}" starts in ${reminderMinutes} minutes`,
         priority: 'high',
@@ -205,7 +207,7 @@ export class NotificationsAPI {
 
       return await this.createNotification({
         userId,
-        type: 'task',
+        type: 'task_reminder',
         title: 'Task Reminder',
         message,
         priority,

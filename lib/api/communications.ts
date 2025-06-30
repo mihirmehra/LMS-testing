@@ -39,12 +39,15 @@ export class CommunicationsAPI {
       const activities = await collection.find({ leadId }).sort({ timestamp: -1 }).toArray();
       
       return activities.map(activity => ({
-        ...activity,
         id: activity._id.toString(),
-        _id: undefined,
-        timestamp: new Date(activity.timestamp),
-        createdAt: new Date(activity.createdAt),
-        updatedAt: new Date(activity.updatedAt),
+        _id: undefined, // Ensure _id is not included in the returned object
+        leadId: activity.leadId, // Include required properties
+        type: activity.type,
+        action: activity.action,
+        agent: activity.agent,
+        timestamp: activity.timestamp instanceof Date ? activity.timestamp : new Date(activity.timestamp),
+        createdAt: activity.createdAt instanceof Date ? activity.createdAt : new Date(activity.createdAt),
+        updatedAt: activity.updatedAt instanceof Date ? activity.updatedAt : new Date(activity.updatedAt),
       })) as CommunicationActivity[];
     } catch (error) {
       console.error('Error fetching communication activities:', error);
@@ -94,13 +97,15 @@ export class CommunicationsAPI {
       const events = await collection.find(query).sort({ startDateTime: 1 }).toArray();
       
       return events.map(event => ({
-        ...event,
         id: event._id.toString(),
-        _id: undefined,
-        startDateTime: new Date(event.startDateTime),
-        endDateTime: new Date(event.endDateTime),
-        createdAt: new Date(event.createdAt),
-        updatedAt: new Date(event.updatedAt),
+        _id: undefined, // Ensure _id is not included in the returned object
+        createdBy: event.createdBy, // Include required properties
+        title: event.title,
+        description: event.description,
+        startDateTime: event.startDateTime instanceof Date ? event.startDateTime : new Date(event.startDateTime),
+        endDateTime: event.endDateTime instanceof Date ? event.endDateTime : new Date(event.endDateTime),
+        createdAt: event.createdAt instanceof Date ? event.createdAt : new Date(event.createdAt),
+        updatedAt: event.updatedAt instanceof Date ? event.updatedAt : new Date(event.updatedAt),
       })) as CalendarEvent[];
     } catch (error) {
       console.error('Error fetching calendar events:', error);
@@ -133,13 +138,15 @@ export class CommunicationsAPI {
       }
 
       return {
-        ...result,
-        id: result._id.toString(),
-        _id: undefined,
-        startDateTime: new Date(result.startDateTime),
-        endDateTime: new Date(result.endDateTime),
-        createdAt: new Date(result.createdAt),
-        updatedAt: new Date(result.updatedAt),
+        id: result.value._id.toString(),
+        _id: undefined, // Ensure _id is not included in the returned object
+        createdBy: result.value.createdBy, // Include required properties
+        title: result.value.title,
+        description: result.value.description,
+        startDateTime: result.value.startDateTime instanceof Date ? result.value.startDateTime : new Date(result.value.startDateTime),
+        endDateTime: result.value.endDateTime instanceof Date ? result.value.endDateTime : new Date(result.value.endDateTime),
+        createdAt: result.value.createdAt instanceof Date ? result.value.createdAt : new Date(result.value.createdAt),
+        updatedAt: result.value.updatedAt instanceof Date ? result.value.updatedAt : new Date(result.value.updatedAt),
       } as CalendarEvent;
     } catch (error) {
       console.error('Error updating calendar event:', error);
@@ -194,12 +201,14 @@ export class CommunicationsAPI {
       const messages = await collection.find({ leadId }).sort({ sentAt: -1 }).toArray();
       
       return messages.map(message => ({
-        ...message,
         id: message._id.toString(),
-        _id: undefined,
-        sentAt: new Date(message.sentAt),
-        createdAt: new Date(message.createdAt),
-        updatedAt: new Date(message.updatedAt),
+        leadId: message.leadId,
+        message: message.message,
+        sentBy: message.sentBy,
+        status: message.status,
+        sentAt: message.sentAt instanceof Date ? message.sentAt : new Date(message.sentAt),
+        createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt),
+        updatedAt: message.updatedAt instanceof Date ? message.updatedAt : new Date(message.updatedAt),
       })) as WhatsAppMessage[];
     } catch (error) {
       console.error('Error fetching WhatsApp messages:', error);

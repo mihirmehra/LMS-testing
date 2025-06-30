@@ -85,15 +85,17 @@ export class UsersAPI {
       const collection = await this.getCollection();
       const users = await collection.find({ isActive: true }).sort({ name: 1 }).toArray();
       
-      return users.map(user => ({
-        ...user,
-        id: user._id.toString(),
-        _id: undefined,
-        password: undefined, // Never return password
-        createdAt: new Date(user.createdAt),
-        updatedAt: new Date(user.updatedAt),
-        lastLogin: user.lastLogin ? new Date(user.lastLogin) : undefined,
-      })) as User[];
+      return users.map(user => {
+        // Destructure to remove _id and password, and add id
+        const { _id, password, ...rest } = user;
+        return {
+          ...rest,
+          id: _id.toString(),
+          createdAt: new Date(user.createdAt),
+          updatedAt: new Date(user.updatedAt),
+          lastLogin: user.lastLogin ? new Date(user.lastLogin) : undefined,
+        } as User;
+      });
     } catch (error) {
       console.error('Error fetching users:', error);
       throw new Error('Failed to fetch users');
@@ -112,13 +114,19 @@ export class UsersAPI {
       if (!user) return null;
       
       return {
-        ...user,
         id: user._id.toString(),
-        _id: undefined,
-        password: undefined, // Never return password
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        isActive: user.isActive,
+        preferences: user.preferences,
+        phone: user.phone,
+        department: user.department,
+        googleAccount: user.googleAccount,
         createdAt: new Date(user.createdAt),
         updatedAt: new Date(user.updatedAt),
         lastLogin: user.lastLogin ? new Date(user.lastLogin) : undefined,
+        // Do not include password or _id
       } as User;
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -227,6 +235,7 @@ export class UsersAPI {
         ...newUser,
         id: result.insertedId.toString(),
         password: undefined, // Never return password
+        googleAccount: undefined,
       } as User;
     } catch (error) {
       console.error('Error creating user:', error);
@@ -234,7 +243,7 @@ export class UsersAPI {
     }
   }
 
-  static async updateUser(id: string, updateData: Partial<User>): Promise<User> {
+  static async updateUser(id: string, updateData: Partial<User> & { password?: string }): Promise<User> {
     try {
       if (!ObjectId.isValid(id)) {
         throw new Error('Invalid user ID');
@@ -253,7 +262,7 @@ export class UsersAPI {
       
       // If password is being updated, hash it
       if (password) {
-        dataToUpdate.password = await bcrypt.hash(password, 10);
+        (dataToUpdate as any).password = await bcrypt.hash(password, 10);
       }
       
       const result = await collection.findOneAndUpdate(
@@ -272,13 +281,19 @@ export class UsersAPI {
       }
 
       return {
-        ...result,
         id: result._id.toString(),
-        _id: undefined,
-        password: undefined, // Never return password
+        email: result.email,
+        name: result.name,
+        role: result.role,
+        isActive: result.isActive,
+        preferences: result.preferences,
+        phone: result.phone,
+        department: result.department,
+        googleAccount: result.googleAccount,
         createdAt: new Date(result.createdAt),
         updatedAt: new Date(result.updatedAt),
         lastLogin: result.lastLogin ? new Date(result.lastLogin) : undefined,
+        password: undefined, // Never return password
       } as User;
     } catch (error) {
       console.error('Error updating user:', error);
