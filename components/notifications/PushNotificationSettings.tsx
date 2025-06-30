@@ -59,7 +59,7 @@ export function PushNotificationSettings() {
       const localDevices = JSON.parse(localStorage.getItem('push_devices') || '[]');
       const userDevices = localDevices.filter((d: DeviceRegistration) => d.userId === user.id);
       setDevices(userDevices);
-      setPushEnabled(userDevices.some(d => d.isActive));
+      setPushEnabled(userDevices.some((d:any) => d.isActive));
     } finally {
       setLoading(false);
     }
