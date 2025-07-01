@@ -46,7 +46,6 @@ export class PushNotificationService {
   }
 
   // Inside PushNotificationService class
-
   async registerServiceWorker(): Promise<ServiceWorkerRegistration> {
     if (!this.isSupported()) {
       throw new Error('Service workers are not supported');
@@ -66,21 +65,32 @@ export class PushNotificationService {
       console.log('Service Worker is already active and controlling.');
       return registration;
     } else {
-      // If not active, wait for it to become active
       console.log('Service Worker not yet active. Waiting for state change...');
       return new Promise((resolve) => {
         registration!.addEventListener('statechange', (e: any) => {
           if (e.target.state === 'activated') {
             console.log('Service Worker activated. Taking control...');
-            // Optional: force reload if you want to ensure control immediately after activation
-            // window.location.reload(); 
+
+            // CORRECTED CHECK:
+            // Check if the newly activated Service Worker is controlling the current page
+            if (navigator.serviceWorker.controller !== registration!.active) {
+                console.log('Service Worker activated, but not controlling. Reloading page...');
+                window.location.reload(); 
+            }
             resolve(registration!);
           }
+        });
+        // It's also good practice to handle potential errors in the promise
+        registration!.update().catch(error => { // Try to update the SW to force activation if needed
+          console.error("Service Worker update failed during statechange wait:", error);
+          // You might want to reject the promise here or handle differently
+          // resolve(registration!); // Or resolve to allow the calling function to handle
         });
       });
     }
   }
 
+  
   // Subscribe to push notifications
   async subscribeToPush(userId: string, deviceName: string): Promise<DeviceRegistration> {
     try {
