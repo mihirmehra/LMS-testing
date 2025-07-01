@@ -21,7 +21,7 @@ export interface DeviceRegistration {
 
 export class PushNotificationService {
   private static instance: PushNotificationService;
-  private vapidPublicKey = 'BEl62iUYgUivxIkv69yViEuiBIa40HdHSWgNfZeeyCLdmw'; // Demo key
+  private vapidPublicKey = 'BLOewXy_CrdUjxFlR_G1wwo2vItf3NgGs3ylT_9YKa7i1r54okXcK1v5C6Ns4SF-mlnRKbpptlxRRYGPcGgrD3I'; // Demo key
 
   static getInstance(): PushNotificationService {
     if (!PushNotificationService.instance) {
