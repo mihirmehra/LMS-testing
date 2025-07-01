@@ -143,7 +143,7 @@ export default function Home() {
     return counts;
   }, [userFilteredLeads]);
 
-  const handleAddLead = async (newLeadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'activities'>) => {
+  const handleAddLead = async (newLeadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
       await createLead(newLeadData);
     } catch (error) {
