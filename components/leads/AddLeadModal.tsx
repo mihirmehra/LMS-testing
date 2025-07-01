@@ -1,3 +1,4 @@
+// components/leads/AddLeadModal.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,46 +9,56 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Lead } from '@/types/lead';
+import { Lead } from '@/types/lead'; // Ensure Lead type is correctly imported
 import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
-import { budgetRanges, locations } from '@/lib/mockData';
+import { budgetRanges, locations } from '@/lib/mockData'; // Assuming these exist
 
 interface AddLeadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'activities'>) => void;
+  // The lead parameter should align with what the backend expects for creation.
+  // If `notes` and `attachments` are *always* sent (even if empty), they should not be omitted here.
+  // If `createdBy` is auto-set by backend or derived, it can be omitted.
+  // For simplicity, `Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>` is generally correct as these are backend-generated.
+  onAddLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => void;
 }
 
 export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProps) {
   const { user } = useAuth();
   const permissionService = PermissionService.getInstance();
-  const [agents, setAgents] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]); // Consider typing `any` more strictly if `Agent` type exists
   const [loadingAgents, setLoadingAgents] = useState(false);
-  
-  const [formData, setFormData] = useState({
+
+  // Initialize formData with ALL required Lead properties, even if empty/default
+  const initialFormData = {
     name: '',
     primaryPhone: '',
     secondaryPhone: '',
     primaryEmail: '',
     secondaryEmail: '',
     propertyType: 'Residential' as Lead['propertyType'],
-    budgetRange: '',
+    budgetRange: '', // Should be empty string for 'unselected'
     preferredLocations: [] as string[],
     source: 'Website' as Lead['source'],
     status: 'New' as Lead['status'],
-    assignedAgent: '',
+    assignedAgent: '', // Default to empty string for 'unassigned'
     notes: '',
     leadScore: 'Medium' as Lead['leadScore'],
     attachments: [] as string[],
-  });
+    activities: [], // <--- **Crucial Fix: Initialize activities as an empty array**
+  };
+
+  const [formData, setFormData] = useState(initialFormData);
 
   // Fetch agents (users with role 'agent') when modal opens
   useEffect(() => {
     if (open) {
       fetchAgents();
+      // Reset form data when the modal opens to ensure a clean state for new lead
+      setFormData(initialFormData);
     }
-  }, [open]);
+  }, [open]); // Depend on 'open' state
 
   const fetchAgents = async () => {
     try {
@@ -59,14 +70,14 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         },
       });
-      
+
       if (response.ok) {
         const users = await response.json();
-        // Filter to only include users with role 'agent'
+        // Filter to only include users with role 'agent' and who are active
         const agentUsers = users.filter((u: any) => u.role === 'agent' && u.isActive);
         setAgents(agentUsers);
       } else {
-        console.error('Failed to fetch agents');
+        console.error('Failed to fetch agents:', response.status, await response.json().catch(() => ''));
         setAgents([]);
       }
     } catch (error) {
@@ -83,23 +94,26 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
   const formatPhoneNumber = (value: string) => {
     // Remove all non-digits
     const digits = value.replace(/\D/g, '');
-    
+
     // If it starts with 91, keep it as is
     if (digits.startsWith('91')) {
       return `+${digits}`;
     }
-    
+
     // If it's a 10-digit number, add +91
     if (digits.length === 10) {
       return `+91${digits}`;
     }
-    
-    // If it's less than 10 digits, just add +91 prefix
+
+    // If it's less than 10 digits and starts with a digit, add +91 prefix
+    // This handles cases where user types just digits
     if (digits.length > 0 && digits.length < 10) {
       return `+91${digits}`;
     }
-    
+
     // For other cases, return as is with + prefix if digits exist
+    // This handles cases where user might paste a number with a different country code,
+    // or an incomplete number.
     return digits.length > 0 ? `+${digits}` : '';
   };
 
@@ -111,37 +125,27 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.primaryPhone || !formData.primaryEmail) {
+      // Potentially show a toast or error message to the user
+      alert('Please fill in all required fields: Full Name, Primary Phone, Primary Email.');
       return;
     }
 
-    // For agents, automatically assign to themselves if no agent is selected
-    let assignedAgent = formData.assignedAgent;
-    if (user?.role === 'agent' && !assignedAgent) {
-      assignedAgent = user.id;
+    let finalAssignedAgent = formData.assignedAgent;
+
+    // Logic for assigning agent if user is an agent and no agent is explicitly selected
+    if (user?.role === 'agent' && !canAssignLeads) {
+      // If the current user is an agent and cannot assign leads (meaning they'll be assigned to themselves)
+      finalAssignedAgent = user.id;
+    } else if (formData.assignedAgent === 'unassigned') {
+      // If 'Unassigned' was explicitly selected in the dropdown
+      finalAssignedAgent = ''; // Send empty string for unassigned
     }
 
     onAddLead({
       ...formData,
-      assignedAgent: assignedAgent === 'unassigned' ? undefined : assignedAgent,
-      createdBy: user?.id, // Track who created the lead
-    });
-
-    // Reset form
-    setFormData({
-      name: '',
-      primaryPhone: '',
-      secondaryPhone: '',
-      primaryEmail: '',
-      secondaryEmail: '',
-      propertyType: 'Residential',
-      budgetRange: '',
-      preferredLocations: [],
-      source: 'Website',
-      status: 'New',
-      assignedAgent: '',
-      notes: '',
-      leadScore: 'Medium',
-      attachments: [],
+      // Ensure assignedAgent is a string (empty string for unassigned)
+      assignedAgent: finalAssignedAgent,
+      createdBy: user?.id || 'system', // Default to 'system' if user is not available
     });
 
     onOpenChange(false);
