@@ -45,25 +45,28 @@ export class PushNotificationService {
     return permission;
   }
 
-  // Inside PushNotificationService class
   async registerServiceWorker(): Promise<ServiceWorkerRegistration> {
       if (!this.isSupported()) {
-          throw new Error('Service workers are not supported');
+        throw new Error('Service workers are not supported');
       }
 
       console.log('registerServiceWorker: Starting checks...');
 
       // Get existing registration or register a new one
       console.log('registerServiceWorker: Attempting to get existing registration...');
-      let registration: ServiceWorkerRegistration | undefined = await navigator.serviceWorker.getRegistration('/sw.js'); // Check for existing
-
+      let registration = await navigator.serviceWorker.getRegistration('/sw.js'); // registration could be undefined here
+      
       if (!registration) {
-          console.log('registerServiceWorker: No existing SW found. Registering new service worker...');
-          registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-          console.log('registerServiceWorker: New SW registration call completed.');
+        console.log('registerServiceWorker: No existing SW found. Registering new service worker...');
+        registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        console.log('registerServiceWorker: New SW registration call completed.');
       } else {
-          console.log('registerServiceWorker: Service Worker already registered:', registration);
+        console.log('registerServiceWorker: Service Worker already registered:', registration);
       }
+
+      // At this point, 'registration' is guaranteed to be a ServiceWorkerRegistration object.
+      // If 'navigator.serviceWorker.getRegistration' or 'navigator.serviceWorker.register'
+      // failed to return a registration, they would have thrown an error, preventing execution past here.
 
       // Ensure the service worker is active and controlling the page
       if (registration.active && navigator.serviceWorker.controller === registration.active) {
@@ -73,28 +76,44 @@ export class PushNotificationService {
           console.log('registerServiceWorker: SW not yet active or not controlling. Setting up statechange listener...');
           return new Promise((resolve) => {
               const checkAndResolve = () => {
-                  console.log(`registerServiceWorker: State change detected or immediate check. Current SW state: ${registration?.active?.state}, Controller: ${navigator.serviceWorker.controller ? 'present' : 'absent'}`);
-                  if (registration.active && navigator.serviceWorker.controller === registration.active) {
+                  // Use '!' to assert that registration is not null/undefined
+                  console.log(`registerServiceWorker: State change detected or immediate check. Current SW state: ${registration!.active?.state}, Controller: ${navigator.serviceWorker.controller ? 'present' : 'absent'}`);
+                  
+                  // Use '!' consistently inside the condition
+                  if (registration!.active && navigator.serviceWorker.controller === registration!.active) {
                       console.log('registerServiceWorker: SW activated and now controlling. Resolving registration promise.');
-                      registration.removeEventListener('statechange', checkAndResolve); // Clean up listener
-                      resolve(registration);
+                      registration!.removeEventListener('statechange', checkAndResolve); // Use '!'
+                      resolve(registration!); // Use '!'
+                  } 
+                  // Add the reload logic back for robust first-time activation handling
+                  else if (registration!.active && !navigator.serviceWorker.controller) {
+                      console.warn('registerServiceWorker: SW activated, but not controlling. Reloading page to establish control...');
+                      window.location.reload(); 
+                      // Note: This reload means the promise won't resolve on *this* page load.
+                      // It will resolve immediately on the *reloaded* page when this function runs again.
                   }
               };
 
               // Attach listener for state changes
-              registration.addEventListener('updatefound', () => {
-                  const newWorker = registration.installing;
+              // The error was likely here for 'registration.addEventListener' without '!'
+              registration!.addEventListener('updatefound', () => { // Use '!'
+                  const newWorker = registration!.installing; // Use '!'
                   if (newWorker) {
                       newWorker.addEventListener('statechange', checkAndResolve);
                   }
               });
+              
+              // Also attach listener for 'statechange' directly on the registration for initial activation
+              // This is crucial if 'updatefound' doesn't fire immediately (e.g., on first install).
+              // This line was present in previous versions and is important.
+              registration!.addEventListener('statechange', checkAndResolve);
+
 
               // Also check immediately in case it's already active but just not controlling
               checkAndResolve();
           });
       }
   }
-
 
   
   // Subscribe to push notifications
