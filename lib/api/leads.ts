@@ -95,48 +95,56 @@ export class LeadsAPI {
   }
 
   static async updateLead(id: string, updateData: Partial<Lead>): Promise<Lead> {
-    try {
-      if (!ObjectId.isValid(id)) {
-        throw new Error('Invalid lead ID');
-      }
-      
-      const collection = await this.getCollection();
-      const now = new Date();
-      
-      const { id: _, ...dataToUpdate } = updateData;
-      
-      const result = await collection.findOneAndUpdate(
-        { _id: new ObjectId(id) },
-        { 
-          $set: { 
-            ...dataToUpdate, 
-            updatedAt: now 
-          } 
-        },
-        { returnDocument: 'after' }
-      );
+      try {
+          if (!ObjectId.isValid(id)) {
+              throw new Error('Invalid lead ID');
+          }
 
-      if (!result?.value) {
-        throw new Error('Lead not found');
-      }
+          const collection = await this.getCollection();
+          const now = new Date();
 
-      const { _id, ...rest } = result.value;
-      return {
-        ...rest,
-        id: _id,
-        createdAt: new Date(result.value.createdAt),
-        updatedAt: new Date(result.value.updatedAt),
-        lastContacted: result.value.lastContacted ? new Date(result.value.lastContacted) : undefined,
-        activities: result.value.activities?.map((activity: any) => ({
-          ...activity,
-          date: new Date(activity.date)
-        })) || []
-      } as Lead;
-    } catch (error) {
-      console.error('Error updating lead:', error);
-      throw new Error('Failed to update lead');
-    }
+          const { id: _, ...dataToUpdate } = updateData;
+
+          // Check if the lead exists before updating
+          const existingLead = await collection.findOne({ _id: new ObjectId(id) });
+          if (!existingLead) {
+              throw new Error('Lead not found');
+          }
+
+          const result = await collection.findOneAndUpdate(
+              { _id: new ObjectId(id) },
+              {
+                  $set: {
+                      ...dataToUpdate,
+                      updatedAt: now
+                  }
+              },
+              { returnDocument: 'after' }
+          );
+
+          if (!result?.value) {
+              throw new Error('Lead not found');
+          }
+
+          const { _id, ...rest } = result.value;
+          return {
+              ...rest,
+              id: _id.toString(),
+              createdAt: new Date(result.value.createdAt),
+              updatedAt: new Date(result.value.updatedAt),
+              lastContacted: result.value.lastContacted ? new Date(result.value.lastContacted) : undefined,
+              activities: result.value.activities?.map((activity: any) => ({
+                  ...activity,
+                  date: new Date(activity.date)
+              })) || []
+          } as Lead;
+
+      } catch (error) {
+          console.error('Error updating lead with ID:', id, error);
+          throw new Error('Failed to update lead');
+      }
   }
+
 
   static async deleteLead(id: string): Promise<boolean> {
     try {

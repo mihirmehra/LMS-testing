@@ -77,14 +77,8 @@ export function useLeads() {
         setLeads(prev => prev.map(lead => lead.id === id ? updatedLead : lead));
         return updatedLead;
       } else {
-        let errorMessage = 'Failed to update lead';
-        try {
-          const error = await response.json();
-          errorMessage = error.message || errorMessage;
-        } catch {
-          // response is not JSON, keep default message
-        }
-        throw new Error(errorMessage);
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to update lead');
       }
     } catch (err) {
       console.error('Error updating lead:', err);
