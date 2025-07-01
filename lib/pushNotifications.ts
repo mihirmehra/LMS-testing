@@ -100,8 +100,14 @@ export class PushNotificationService {
         throw new Error('Notification permission denied');
       }
 
+      console.log('permission')
+      console.log(permission)
+
       // Register service worker
       const registration = await this.registerServiceWorker();
+      
+      console.log('registration')
+      console.log(registration)
 
       // Subscribe to push notifications
       const subscription = await registration.pushManager.subscribe({
@@ -111,6 +117,9 @@ export class PushNotificationService {
 
       // Detect device type
       const deviceType = this.detectDeviceType();
+
+      console.log('device')
+      console.log(deviceType)
 
       // Create device registration object
       const deviceRegistration: DeviceRegistration = {
