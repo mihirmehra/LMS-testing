@@ -13,24 +13,24 @@ import { Lead } from '@/types/lead'; // Ensure Lead type is correctly imported
 import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
 import { budgetRanges, locations } from '@/lib/mockData'; // Assuming these exist
+import { NewLeadData } from '@/hooks/useLeads'; // Import the NewLeadData type from useLeads
 
 interface AddLeadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // The lead parameter should align with what the backend expects for creation.
-  // If `notes` and `attachments` are *always* sent (even if empty), they should not be omitted here.
-  // If `createdBy` is auto-set by backend or derived, it can be omitted.
-  // For simplicity, `Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>` is generally correct as these are backend-generated.
-  onAddLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  // Updated: onAddLead now correctly expects an async function returning Promise<Lead>
+  onAddLead: (lead: NewLeadData) => Promise<Lead>;
 }
 
 export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProps) {
   const { user } = useAuth();
   const permissionService = PermissionService.getInstance();
-  const [agents, setAgents] = useState<any[]>([]); // Consider typing `any` more strictly if `Agent` type exists
+  const [agents, setAgents] = useState<any[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Added: State for submit button loading
 
   // Initialize formData with ALL required Lead properties, even if empty/default
+  // createdBy is set here as a default, and also upon modal open/user change
   const initialFormData = {
     name: '',
     primaryPhone: '',
@@ -38,7 +38,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
     primaryEmail: '',
     secondaryEmail: '',
     propertyType: 'Residential' as Lead['propertyType'],
-    budgetRange: '', // Should be empty string for 'unselected'
+    budgetRange: '',
     preferredLocations: [] as string[],
     source: 'Website' as Lead['source'],
     status: 'New' as Lead['status'],
@@ -46,34 +46,39 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
     notes: '',
     leadScore: 'Medium' as Lead['leadScore'],
     attachments: [] as string[],
-    activities: [], // <--- **Crucial Fix: Initialize activities as an empty array**
+    activities: [], // Initialize activities as an empty array
+    // createdBy will be set dynamically based on `user?.id` when modal opens
+    // Do not include `createdAt`, `updatedAt`, `id` as they are backend-generated
   };
 
-  const [formData, setFormData] = useState(initialFormData);
+  const [formData, setFormData] = useState<NewLeadData>(initialFormData); // Use NewLeadData type for formData
 
   // Fetch agents (users with role 'agent') when modal opens
   useEffect(() => {
     if (open) {
       fetchAgents();
-      // Reset form data when the modal opens to ensure a clean state for new lead
-      setFormData(initialFormData);
+      // Reset form data and set createdBy based on current user when the modal opens
+      setFormData({
+        ...initialFormData,
+        createdBy: user?.id || 'system', // Set createdBy based on logged-in user
+      });
     }
-  }, [open]); // Depend on 'open' state
+  }, [open, user?.id]); // Depend on 'open' and 'user.id' state to reset form
 
   const fetchAgents = async () => {
     try {
       setLoadingAgents(true);
+      const token = localStorage.getItem('auth_token');
       const response = await fetch('/api/users', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }), // Include Authorization header
         },
       });
 
       if (response.ok) {
         const users = await response.json();
-        // Filter to only include users with role 'agent' and who are active
         const agentUsers = users.filter((u: any) => u.role === 'agent' && u.isActive);
         setAgents(agentUsers);
       } else {
@@ -92,28 +97,17 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
   const availableAgents = permissionService.filterAgentsForUser(agents, user);
 
   const formatPhoneNumber = (value: string) => {
-    // Remove all non-digits
     const digits = value.replace(/\D/g, '');
 
-    // If it starts with 91, keep it as is
     if (digits.startsWith('91')) {
       return `+${digits}`;
     }
-
-    // If it's a 10-digit number, add +91
     if (digits.length === 10) {
       return `+91${digits}`;
     }
-
-    // If it's less than 10 digits and starts with a digit, add +91 prefix
-    // This handles cases where user types just digits
     if (digits.length > 0 && digits.length < 10) {
       return `+91${digits}`;
     }
-
-    // For other cases, return as is with + prefix if digits exist
-    // This handles cases where user might paste a number with a different country code,
-    // or an incomplete number.
     return digits.length > 0 ? `+${digits}` : '';
   };
 
@@ -122,33 +116,39 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
     setFormData(prev => ({ ...prev, [field]: formattedPhone }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => { // Made async because onAddLead is async
     e.preventDefault();
     if (!formData.name || !formData.primaryPhone || !formData.primaryEmail) {
-      // Potentially show a toast or error message to the user
       alert('Please fill in all required fields: Full Name, Primary Phone, Primary Email.');
       return;
     }
 
-    let finalAssignedAgent = formData.assignedAgent;
+    setIsSubmitting(true); // Set submitting to true
+    try {
+      let finalAssignedAgent = formData.assignedAgent;
 
-    // Logic for assigning agent if user is an agent and no agent is explicitly selected
-    if (user?.role === 'agent' && !canAssignLeads) {
-      // If the current user is an agent and cannot assign leads (meaning they'll be assigned to themselves)
-      finalAssignedAgent = user.id;
-    } else if (formData.assignedAgent === 'unassigned') {
-      // If 'Unassigned' was explicitly selected in the dropdown
-      finalAssignedAgent = ''; // Send empty string for unassigned
+      if (user?.role === 'agent' && !canAssignLeads) {
+        finalAssignedAgent = user.id;
+      } else if (formData.assignedAgent === 'unassigned' || formData.assignedAgent === '') {
+        // Explicitly set to empty string if 'unassigned' or empty is chosen/defaulted
+        finalAssignedAgent = '';
+      }
+
+      // Prepare the lead data for submission based on NewLeadData type
+      const leadToSubmit: NewLeadData = {
+        ...formData,
+        assignedAgent: finalAssignedAgent,
+        createdBy: user?.id || 'system', // Ensure createdBy is explicitly passed
+      };
+
+      await onAddLead(leadToSubmit); // Call the async function
+      onOpenChange(false); // Close modal on success
+    } catch (error) {
+      console.error('Failed to add lead:', error);
+      alert('Failed to add lead. Please try again.'); // User-friendly error message
+    } finally {
+      setIsSubmitting(false); // Reset submitting state
     }
-
-    onAddLead({
-      ...formData,
-      // Ensure assignedAgent is a string (empty string for unassigned)
-      assignedAgent: finalAssignedAgent,
-      createdBy: user?.id || 'system', // Default to 'system' if user is not available
-    });
-
-    onOpenChange(false);
   };
 
   const handleLocationChange = (location: string, checked: boolean) => {
@@ -300,7 +300,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
                 <div>
                   <Label htmlFor="assignedAgent">Assigned Agent</Label>
                   <Select
-                    value={formData.assignedAgent || 'unassigned'}
+                    value={formData.assignedAgent || 'unassigned'} // Display 'unassigned' if empty
                     onValueChange={(value) => setFormData(prev => ({ ...prev, assignedAgent: value === 'unassigned' ? '' : value }))}
                   >
                     <SelectTrigger>
@@ -386,11 +386,11 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-              Add Lead
+            <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
+              {isSubmitting ? 'Adding...' : 'Add Lead'}
             </Button>
           </DialogFooter>
         </form>

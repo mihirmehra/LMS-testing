@@ -1,24 +1,40 @@
-// useLeads.ts
+// hooks/useLeads.ts
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Lead, Activity } from '@/types/lead'; // Ensure Activity is imported here too
+
+// Define the shape of data required for adding a new lead (without backend-generated fields)
+export type NewLeadData = Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'activities' | 'lastContacted' | 'attachments'> & {
+  activities?: Activity[]; // Ensure activities can be included when creating, even if empty
+  attachments?: string[]; // Ensure attachments can be included
+};
+
+// Define the shape of data required for updating an existing lead
+export type UpdateLeadData = Partial<Omit<Lead, 'createdAt' | 'updatedAt'>>; // Make sure it's partial and omits backend-generated fields
 
 export function useLeads() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchLeads = async () => {
+  // Helper to get authorization headers
+  const getAuthHeaders = useCallback(() => {
+    const token = localStorage.getItem('auth_token');
+    return {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+    };
+  }, []);
+
+  const fetchLeads = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
       const response = await fetch('/api/leads', {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(), // Use the helper for headers
       });
 
       if (response.ok) {
@@ -35,19 +51,17 @@ export function useLeads() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
 
   // Type for lead creation: omit fields handled by the backend
-  const createLead = async (
-    leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'> // Activities, notes, attachments are part of the payload
+  const createLead = useCallback(async (
+    leadData: NewLeadData // Use the exported type
   ): Promise<Lead> => {
     try {
       const response = await fetch('/api/leads', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(leadData), // Send the leadData as is, backend handles default activities/notes
+        headers: getAuthHeaders(), // Use the helper for headers
+        body: JSON.stringify(leadData),
       });
 
       if (response.ok) {
@@ -63,17 +77,15 @@ export function useLeads() {
       console.error('Error creating lead:', err);
       throw err; // Re-throw for component to handle
     }
-  };
+  }, [getAuthHeaders]);
 
-  const updateLead = async (id: string, updateData: Partial<Lead>): Promise<Lead> => {
+  const updateLead = useCallback(async (id: string, updateData: UpdateLeadData): Promise<Lead> => {
     try {
       console.log('Updating lead with ID:', id, 'Data:', updateData);
 
       const response = await fetch(`/api/leads/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(), // Use the helper for headers
         body: JSON.stringify(updateData),
       });
 
@@ -92,12 +104,13 @@ export function useLeads() {
       console.error('Error updating lead:', err);
       throw err; // Re-throw for component to handle
     }
-  };
+  }, [getAuthHeaders]);
 
-  const deleteLead = async (id: string): Promise<void> => {
+  const deleteLead = useCallback(async (id: string): Promise<void> => {
     try {
       const response = await fetch(`/api/leads/${id}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(), // Use the helper for headers
       });
 
       if (response.ok) {
@@ -111,20 +124,18 @@ export function useLeads() {
       console.error('Error deleting lead:', err);
       throw err; // Re-throw for component to handle
     }
-  };
+  }, [getAuthHeaders]);
 
   // Type for activity creation: omit 'id' (backend generates) and allow 'date' as Date or string
-  const addActivity = async (
+  const addActivity = useCallback(async (
     leadId: string,
-    activityData: Omit<Activity, 'id'> & { date: Date | string }
+    activityData: Omit<Activity, 'id'> & { date?: Date | string } // date can be optional or string/Date
   ): Promise<Lead> => {
     try {
       const response = await fetch(`/api/leads/${leadId}/activities`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(activityData), // Send the activity data
+        headers: getAuthHeaders(), // Use the helper for headers
+        body: JSON.stringify(activityData),
       });
 
       if (response.ok) {
@@ -140,11 +151,11 @@ export function useLeads() {
       console.error('Error adding activity:', err);
       throw err; // Re-throw for component to handle
     }
-  };
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     fetchLeads();
-  }, []); // Empty dependency array means this runs once on mount
+  }, [fetchLeads]); // fetchLeads is now wrapped in useCallback, so this is correct.
 
   return {
     leads,

@@ -15,7 +15,7 @@ import { LeadNotesModal } from '@/components/leads/LeadNotesModal';
 import { LeadTasksModal } from '@/components/leads/LeadTasksModal';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Lead, LeadFilters as Filters } from '@/types/lead';
-import { useLeads } from '@/hooks/useLeads';
+import { NewLeadData, useLeads } from '@/hooks/useLeads';
 import { useAgents } from '@/hooks/useAgents';
 import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
@@ -143,11 +143,16 @@ export default function Home() {
     return counts;
   }, [userFilteredLeads]);
 
-  const handleAddLead = async (newLeadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const handleAddLead = async (newLeadData: NewLeadData): Promise<Lead> => { // Explicitly define return type as Promise<Lead>
     try {
-      await createLead(newLeadData);
+      // Return the result of createLead, which is a Promise<Lead>
+      const createdLead = await createLead(newLeadData);
+      console.log('Lead created successfully:', createdLead);
+      return createdLead; // <-- This is the key change
     } catch (error) {
       console.error('Failed to create lead:', error);
+      // Re-throw the error so the calling component (AddLeadModal) can handle it if needed
+      throw error; // <-- It's good practice to re-throw errors in async handlers
     }
   };
 

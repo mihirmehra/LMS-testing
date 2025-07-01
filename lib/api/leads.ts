@@ -21,7 +21,7 @@ export class LeadsAPI {
           updatedAt,
           lastContacted,
           activities,
-          ...rest
+          ...rest // captures all other properties
         } = lead;
 
         return {
@@ -29,12 +29,12 @@ export class LeadsAPI {
           id: _id.toString(),
           createdAt: new Date(createdAt),
           updatedAt: new Date(updatedAt),
-          lastContacted: lastContacted ? new Date(lastContacted) : undefined,
-          activities: activities?.map((activity: Activity) => ({ // Cast to Activity
+          lastContacted: lastContacted ? new Date(lastContacted) : undefined, // Ensure consistent Date or undefined
+          activities: activities?.map((activity: any) => ({ // Cast from `any` to `Activity` for safety
             ...activity,
             date: new Date(activity.date)
-          })) || []
-        } as Lead;
+          }) as Activity) || [], // Ensure it's an empty array if null/undefined
+        } as Lead; // Final cast to Lead
       });
     } catch (error) {
       console.error('Error fetching leads:', error);
@@ -46,7 +46,6 @@ export class LeadsAPI {
     try {
       if (!ObjectId.isValid(id)) {
         console.warn(`Attempted to fetch lead with invalid ID format: ${id}`);
-        // For 'get' operations, returning null for invalid IDs is often more graceful
         return null;
       }
 
@@ -62,31 +61,30 @@ export class LeadsAPI {
         createdAt: new Date(lead.createdAt),
         updatedAt: new Date(lead.updatedAt),
         lastContacted: lead.lastContacted ? new Date(lead.lastContacted) : undefined,
-        activities: lead.activities?.map((activity: Activity) => ({ // Cast to Activity
+        activities: lead.activities?.map((activity: any) => ({ // Cast from `any` to `Activity`
           ...activity,
           date: new Date(activity.date)
-        })) || []
+        }) as Activity) || []
       } as Lead;
     } catch (error) {
       console.error('Error fetching lead:', error);
-      // Return null on any database error for this specific method
       return null;
     }
   }
 
-  static async createLead(leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>): Promise<Lead> {
+  static async createLead(leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'lastContacted' | 'activities' | 'attachments'> & { activities?: any[], attachments?: string[] }): Promise<Lead> {
     try {
       const collection = await this.getCollection();
       const now = new Date();
 
-      // Ensure required fields like 'notes' and 'activities' are present,
-      // even if empty, based on your Lead interface.
       const newLeadDocument = {
         ...leadData,
-        notes: leadData.notes || '', // Default notes to empty string if not provided
+        notes: leadData.notes || '',
         activities: leadData.activities || [], // Ensure activities is an array
+        attachments: leadData.attachments || [], // Ensure attachments is an array
         createdAt: now,
         updatedAt: now,
+        lastContacted: undefined, // New leads typically don't have a lastContacted date initially
       };
 
       const result = await collection.insertOne(newLeadDocument);
@@ -95,10 +93,24 @@ export class LeadsAPI {
         throw new Error('Failed to acknowledge lead creation');
       }
 
-      return {
+      // Return the created lead in the expected format
+      const createdLead = {
         ...newLeadDocument,
-        id: result.insertedId.toString()
+        id: result.insertedId.toString(),
       } as Lead;
+
+      // Ensure dates are correctly typed for the returned Lead object
+      createdLead.createdAt = new Date(createdLead.createdAt);
+      createdLead.updatedAt = new Date(createdLead.updatedAt);
+      if (createdLead.lastContacted) {
+          createdLead.lastContacted = new Date(createdLead.lastContacted);
+      }
+      createdLead.activities = createdLead.activities?.map((activity: any) => ({
+          ...activity,
+          date: new Date(activity.date)
+      }) as Activity) || [];
+
+      return createdLead;
     } catch (error) {
       console.error('Error creating lead:', error);
       throw new Error('Failed to create lead');
@@ -108,7 +120,6 @@ export class LeadsAPI {
   static async updateLead(id: string, updateData: Partial<Lead>): Promise<Lead> {
     try {
       if (!ObjectId.isValid(id)) {
-        // Throw a specific error for invalid ID format
         throw new Error('Invalid lead ID format');
       }
 
@@ -116,25 +127,45 @@ export class LeadsAPI {
       const now = new Date();
 
       // Destructure to remove 'id' from updateData payload, as _id is handled by query
-      const { id: _, ...dataToUpdate } = updateData;
+      // Also remove backend-managed fields like createdAt, activities, attachments if sent
+      const {
+        id: _,
+        createdAt, // Remove createdAt if sent by frontend
+        activities, // Activities are updated via addActivity, not directly here
+        attachments, // Attachments might be updated directly or via a separate endpoint
+        ...dataToUpdate // This will contain all other fields
+      } = updateData;
+
+      // Handle updating specific fields that might be Date objects or arrays
+      const finalUpdatePayload: any = {
+          ...dataToUpdate,
+          updatedAt: now // Always update `updatedAt` on modifications
+      };
+
+      // If lastContacted is provided in updateData, ensure it's a Date object
+      if (updateData.lastContacted !== undefined) {
+          finalUpdatePayload.lastContacted = updateData.lastContacted ? new Date(updateData.lastContacted) : undefined;
+      }
+      // Handle array updates if they are part of the `dataToUpdate`
+      if (updateData.preferredLocations !== undefined) {
+          finalUpdatePayload.preferredLocations = updateData.preferredLocations;
+      }
+      // Ensure 'notes' is handled if it can be empty string but not null/undefined
+      if (updateData.notes !== undefined) {
+          finalUpdatePayload.notes = updateData.notes;
+      }
+
 
       const result = await collection.findOneAndUpdate(
         { _id: new ObjectId(id) }, // Query for the document by its MongoDB _id
-        {
-          $set: {
-            ...dataToUpdate,
-            updatedAt: now // Always update `updatedAt` on modifications
-          }
-        },
+        { $set: finalUpdatePayload }, // Use $set for partial updates
         { returnDocument: 'after' } // Return the document AFTER the update has been applied
       );
 
-      // `result.value` will be null if no document matched the query criteria
       if (!result?.value) {
-        throw new Error('Lead not found'); // Specific error if lead doesn't exist
+        throw new Error('Lead not found');
       }
 
-      // Map MongoDB's _id back to 'id' for the Lead type
       const { _id, ...rest } = result.value;
       return {
         ...rest,
@@ -142,19 +173,18 @@ export class LeadsAPI {
         createdAt: new Date(result.value.createdAt),
         updatedAt: new Date(result.value.updatedAt),
         lastContacted: result.value.lastContacted ? new Date(result.value.lastContacted) : undefined,
-        activities: result.value.activities?.map((activity: Activity) => ({ // Cast to Activity
+        activities: result.value.activities?.map((activity: any) => ({
           ...activity,
           date: new Date(activity.date)
-        })) || []
+        }) as Activity) || []
       } as Lead;
 
     } catch (error) {
       console.error('Error updating lead with ID:', id, error);
-      // Re-throw specific errors for client-side distinction
       if (error instanceof Error && (error.message === 'Invalid lead ID format' || error.message === 'Lead not found')) {
-        throw error; // Re-throw the specific error
+        throw error;
       }
-      throw new Error('Failed to update lead due to an internal error'); // Generic fallback
+      throw new Error('Failed to update lead due to an internal error');
     }
   }
 
@@ -167,14 +197,13 @@ export class LeadsAPI {
 
       const collection = await this.getCollection();
       const result = await collection.deleteOne({ _id: new ObjectId(id) });
-      return result.deletedCount === 1; // Returns true if one document was deleted
+      return result.deletedCount === 1;
     } catch (error) {
       console.error('Error deleting lead:', error);
-      return false; // Return false on any deletion error
+      return false;
     }
   }
 
-  // Updated addActivity method to strictly adhere to your Activity interface
   static async addActivity(leadId: string, activityData: Omit<Activity, 'id'> & { date?: Date | string }): Promise<Lead> {
     try {
       if (!ObjectId.isValid(leadId)) {
@@ -184,33 +213,28 @@ export class LeadsAPI {
       const collection = await this.getCollection();
       const now = new Date();
 
-      // Construct the new activity object, ensuring all required fields are present
       const newActivity: Activity = {
-        // Generate a unique ID for the activity within the array
-        id: new ObjectId().toString(),
-        // Ensure date is a Date object, defaulting to now if not provided or invalid
+        id: new ObjectId().toString(), // Generate unique ID for the activity
         date: activityData.date ? new Date(activityData.date) : now,
-        type: activityData.type, // Required by Activity interface
-        description: activityData.description, // Required by Activity interface
-        agent: activityData.agent, // Required by Activity interface
-        metadata: activityData.metadata, // Optional field
+        type: activityData.type,
+        description: activityData.description,
+        agent: activityData.agent,
+        metadata: activityData.metadata,
       };
 
       const result = await collection.findOneAndUpdate(
         { _id: new ObjectId(leadId) },
         {
-          $push: { activities: newActivity as any }, // Add the new activity to the array
+          $push: { activities: newActivity as any }, // Use $push to add to the array
           $set: { updatedAt: now, lastContacted: now } // Update timestamps
         },
-        { returnDocument: 'after' } // Get the updated document
+        { returnDocument: 'after' }
       );
 
-      // Check `result.value` to see if a lead was found and updated
       if (!result?.value) {
         throw new Error('Lead not found');
       }
 
-      // Map MongoDB's _id back to 'id' for the Lead type and convert dates
       const { _id, ...rest } = result.value;
       return {
         ...rest,
@@ -218,10 +242,10 @@ export class LeadsAPI {
         createdAt: new Date(result.value.createdAt),
         updatedAt: new Date(result.value.updatedAt),
         lastContacted: result.value.lastContacted ? new Date(result.value.lastContacted) : undefined,
-        activities: result.value.activities?.map((activity: Activity) => ({ // Explicitly type `activity` as `Activity`
+        activities: result.value.activities?.map((activity: any) => ({
           ...activity,
-          date: new Date(activity.date) // Ensure activity date is a Date object
-        })) || []
+          date: new Date(activity.date)
+        }) as Activity) || []
       } as Lead;
     } catch (error) {
       console.error('Error adding activity:', error);
