@@ -273,7 +273,7 @@ export function CalendarEventModal({
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Not connected to Google Calendar. Click "Connect Google Calendar" to enable event creation.
+              Not connected to Google Calendar. Click Connect Google Calendar to enable event creation.
             </AlertDescription>
           </Alert>
         );

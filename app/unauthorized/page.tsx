@@ -22,12 +22,12 @@ export default function UnauthorizedPage() {
               Access Denied
             </CardTitle>
             <CardDescription className="text-gray-600">
-              You don't have permission to access this page
+              You dont have permission to access this page
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center space-y-4">
             <p className="text-sm text-gray-600">
-              This page requires specific permissions that your account doesn't have. 
+              This page requires specific permissions that your account doesnt have. 
               Please contact your administrator if you believe this is an error.
             </p>
             <div className="flex flex-col space-y-2">

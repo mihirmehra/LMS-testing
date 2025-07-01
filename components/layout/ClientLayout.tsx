@@ -18,7 +18,7 @@ export function ClientLayout({ children }: ClientLayoutProps) {
 
   // Public routes that don't require authentication
   const publicRoutes = ['/login', '/register', '/unauthorized'];
-  const isPublicRoute = publicRoutes.includes(pathname);
+  const isPublicRoute = publicRoutes.includes(pathname ?? '');
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated && !isPublicRoute) {
