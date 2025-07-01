@@ -143,6 +143,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
 
       await onAddLead(leadToSubmit); // Call the async function
       onOpenChange(false); // Close modal on success
+      window.location.reload(); // Reload the window
     } catch (error) {
       console.error('Failed to add lead:', error);
       alert('Failed to add lead. Please try again.'); // User-friendly error message

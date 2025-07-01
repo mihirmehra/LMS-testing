@@ -110,6 +110,7 @@ export function useLeads() {
         }
 
         console.error('Update failed. Status:', response.status, 'Details:', errorDetails);
+        window.location.reload(); // Reload the window
         throw new Error(`Failed to update lead: ${errorDetails}`);
       }
     } catch (err) {
