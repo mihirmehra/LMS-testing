@@ -51,41 +51,47 @@ export class PushNotificationService {
       throw new Error('Service workers are not supported');
     }
 
+    console.log('registerServiceWorker: Starting checks...');
+
     // Get existing registration or register a new one
+    console.log('registerServiceWorker: Attempting to get existing registration...');
     let registration = await navigator.serviceWorker.getRegistration('/sw.js'); // Check for existing
+    
     if (!registration) {
-      console.log('Registering new service worker...');
+      console.log('registerServiceWorker: No existing SW found. Registering new service worker...');
       registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      console.log('registerServiceWorker: New SW registration call completed.');
     } else {
-      console.log('Service Worker already registered:', registration);
+      console.log('registerServiceWorker: Service Worker already registered:', registration);
     }
 
     // Ensure the service worker is active and controlling the page
-    if (registration.active) {
-      console.log('Service Worker is already active and controlling.');
+    if (registration.active && navigator.serviceWorker.controller === registration.active) {
+      console.log('registerServiceWorker: SW is already active and controlling. Resolving directly.');
       return registration;
     } else {
-      console.log('Service Worker not yet active. Waiting for state change...');
+      console.log('registerServiceWorker: SW not yet active or not controlling. Setting up statechange listener...');
       return new Promise((resolve) => {
-        registration!.addEventListener('statechange', (e: any) => {
-          if (e.target.state === 'activated') {
-            console.log('Service Worker activated. Taking control...');
-
-            // CORRECTED CHECK:
-            // Check if the newly activated Service Worker is controlling the current page
-            if (navigator.serviceWorker.controller !== registration!.active) {
-                console.log('Service Worker activated, but not controlling. Reloading page...');
-                window.location.reload(); 
-            }
+        const checkAndResolve = () => {
+          console.log(`registerServiceWorker: State change detected or immediate check. Current SW state: ${registration!.active?.state}, Controller: ${navigator.serviceWorker.controller ? 'present' : 'absent'}`);
+          if (registration!.active && navigator.serviceWorker.controller === registration!.active) {
+            console.log('registerServiceWorker: SW activated and now controlling. Resolving registration promise.');
+            registration!.removeEventListener('statechange', checkAndResolve); // Clean up listener
             resolve(registration!);
+          } else if (registration!.active && !navigator.serviceWorker.controller) {
+            // SW is active, but not controlling (common on first load). Force reload.
+            console.warn('registerServiceWorker: SW activated, but not controlling. Reloading page to establish control...');
+            window.location.reload(); 
+            // Note: The promise will not resolve until after the reload,
+            // but the subsequent page load will hit this check again and resolve immediately.
           }
-        });
-        // It's also good practice to handle potential errors in the promise
-        registration!.update().catch(error => { // Try to update the SW to force activation if needed
-          console.error("Service Worker update failed during statechange wait:", error);
-          // You might want to reject the promise here or handle differently
-          // resolve(registration!); // Or resolve to allow the calling function to handle
-        });
+        };
+
+        // Attach listener for state changes
+        registration!.addEventListener('statechange', checkAndResolve);
+
+        // Also check immediately in case it's already active but just not controlling
+        checkAndResolve();
       });
     }
   }
