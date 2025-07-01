@@ -116,18 +116,18 @@ export class LeadsAPI {
         { returnDocument: 'after' }
       );
 
-      if (!result) {
+      if (!result?.value) {
         throw new Error('Lead not found');
       }
 
-      const { _id, ...rest } = result;
+      const { _id, ...rest } = result.value;
       return {
         ...rest,
         id: _id.toString(),
-        createdAt: new Date(result.createdAt),
-        updatedAt: new Date(result.updatedAt),
-        lastContacted: result.lastContacted ? new Date(result.lastContacted) : undefined,
-        activities: result.activities?.map((activity: any) => ({
+        createdAt: new Date(result.value.createdAt),
+        updatedAt: new Date(result.value.updatedAt),
+        lastContacted: result.value.lastContacted ? new Date(result.value.lastContacted) : undefined,
+        activities: result.value.activities?.map((activity: any) => ({
           ...activity,
           date: new Date(activity.date)
         })) || []
