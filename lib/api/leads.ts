@@ -123,7 +123,7 @@ export class LeadsAPI {
       const { _id, ...rest } = result.value;
       return {
         ...rest,
-        id: _id.toString(),
+        id: _id,
         createdAt: new Date(result.value.createdAt),
         updatedAt: new Date(result.value.updatedAt),
         lastContacted: result.value.lastContacted ? new Date(result.value.lastContacted) : undefined,
