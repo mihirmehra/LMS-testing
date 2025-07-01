@@ -64,6 +64,8 @@ export function useLeads() {
 
   const updateLead = async (id: string, updateData: Partial<Lead>) => {
     try {
+      console.log('Updating lead with ID:', id, 'Data:', updateData);
+
       const response = await fetch(`/api/leads/${id}`, {
         method: 'PUT',
         headers: {
@@ -78,6 +80,7 @@ export function useLeads() {
         return updatedLead;
       } else {
         const error = await response.json();
+        console.error('Update failed:', response.status, error);
         throw new Error(error.message || 'Failed to update lead');
       }
     } catch (err) {
