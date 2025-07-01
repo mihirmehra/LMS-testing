@@ -79,9 +79,10 @@ export function useLeads() {
     }
   }, [getAuthHeaders]);
 
+
   const updateLead = useCallback(async (id: string, updateData: UpdateLeadData): Promise<Lead> => {
     try {
-      console.log('Updating lead with ID:', id, 'Data:', updateData);
+      console.log('Attempting to update lead with ID:', id, 'Data being sent:', updateData);
 
       const response = await fetch(`/api/leads/${id}`, {
         method: 'PUT',
@@ -94,17 +95,34 @@ export function useLeads() {
       if (response.ok) {
         const updatedLead = await response.json();
         setLeads(prev => prev.map(lead => (lead.id === id ? updatedLead : lead)));
+        console.log('Lead updated successfully, received data:', updatedLead);
         return updatedLead;
       } else {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to update lead' }));
-        console.error('Update failed:', response.status, errorData);
-        throw new Error(errorData.message || 'Failed to update lead');
+        // If response is not OK, try to get the error message from the body
+        let errorDetails: string = 'Unknown error';
+        try {
+          const errorData = await response.json();
+          errorDetails = errorData.message || JSON.stringify(errorData);
+        } catch (jsonError) {
+          // This catches cases where the response body is NOT valid JSON
+          errorDetails = `Server responded with status ${response.status}, but body was not valid JSON. Response text: ${await response.text()}`;
+          console.error('Failed to parse error response JSON:', jsonError);
+        }
+
+        console.error('Update failed. Status:', response.status, 'Details:', errorDetails);
+        throw new Error(`Failed to update lead: ${errorDetails}`);
       }
     } catch (err) {
-      console.error('Error updating lead:', err);
-      throw err; // Re-throw for component to handle
+      // This catch block will now receive the re-thrown error from the 'else' block,
+      // or actual network errors (e.g., no internet, CORS issues).
+      console.error('Error caught in updateLead hook:', err);
+      // Ensure the error message is user-friendly if needed
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred during lead update.';
+      throw new Error(errorMessage); // Re-throw for component to handle
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders]); // Ensure getAuthHeaders is stable and correct
+
+// ... (rest of the useLeads hook)
 
   const deleteLead = useCallback(async (id: string): Promise<void> => {
     try {
