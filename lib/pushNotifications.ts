@@ -45,14 +45,40 @@ export class PushNotificationService {
     return permission;
   }
 
-  // Register service worker
+  // Inside PushNotificationService class
+
   async registerServiceWorker(): Promise<ServiceWorkerRegistration> {
     if (!this.isSupported()) {
       throw new Error('Service workers are not supported');
     }
 
-    const registration = await navigator.serviceWorker.register('/sw.js');
-    return registration;
+    // Get existing registration or register a new one
+    let registration = await navigator.serviceWorker.getRegistration('/sw.js'); // Check for existing
+    if (!registration) {
+      console.log('Registering new service worker...');
+      registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    } else {
+      console.log('Service Worker already registered:', registration);
+    }
+
+    // Ensure the service worker is active and controlling the page
+    if (registration.active) {
+      console.log('Service Worker is already active and controlling.');
+      return registration;
+    } else {
+      // If not active, wait for it to become active
+      console.log('Service Worker not yet active. Waiting for state change...');
+      return new Promise((resolve) => {
+        registration!.addEventListener('statechange', (e: any) => {
+          if (e.target.state === 'activated') {
+            console.log('Service Worker activated. Taking control...');
+            // Optional: force reload if you want to ensure control immediately after activation
+            // window.location.reload(); 
+            resolve(registration!);
+          }
+        });
+      });
+    }
   }
 
   // Subscribe to push notifications
