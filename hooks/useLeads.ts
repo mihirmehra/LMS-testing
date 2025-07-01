@@ -85,7 +85,7 @@ export function useLeads() {
       console.log('Attempting to update lead with ID:', id, 'Data being sent:', updateData);
 
       const response = await fetch(`/api/leads/${id}`, {
-        method: 'POST',
+        method: 'PUT',
         headers: getAuthHeaders(), // Use the helper for headers
         body: JSON.stringify(updateData),
       });
