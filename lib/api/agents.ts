@@ -5,14 +5,16 @@ import { ObjectId } from 'mongodb';
 export class AgentsAPI {
   private static async getCollection() {
     const db = await getDatabase();
-    return db.collection('agents');
+    // Change to 'users' collection as per your database structure
+    return db.collection('users'); 
   }
 
   static async getAllAgents(): Promise<Agent[]> {
     try {
       const collection = await this.getCollection();
-      const agents = await collection.find({ active: true }).sort({ name: 1 }).toArray();
-      
+      // Add role: 'agent' to the query
+      const agents = await collection.find({ active: true, role: 'agent' }).sort({ name: 1 }).toArray();
+
       return agents.map(agent => {
         const { _id, ...rest } = agent; // Destructure to omit _id
         return {
@@ -29,7 +31,7 @@ export class AgentsAPI {
   static async createAgent(agentData: Omit<Agent, 'id'>): Promise<Agent> {
     try {
       const collection = await this.getCollection();
-      
+
       // Format phone number to Indian format
       let formattedPhone = agentData.phone;
       if (formattedPhone && !formattedPhone.startsWith('+91')) {
@@ -38,13 +40,14 @@ export class AgentsAPI {
           formattedPhone = `+91-${digits}`;
         }
       }
-      
+
       const result = await collection.insertOne({
         ...agentData,
         phone: formattedPhone,
-        active: agentData.active !== false
+        active: agentData.active !== false,
+        role: 'agent' // Assign the role as 'agent' when creating
       });
-      
+
       return {
         ...agentData,
         phone: formattedPhone,
@@ -61,10 +64,10 @@ export class AgentsAPI {
       if (!ObjectId.isValid(id)) {
         throw new Error('Invalid agent ID');
       }
-      
+
       const collection = await this.getCollection();
       const { id: _, ...dataToUpdate } = updateData;
-      
+
       // Format phone number if provided
       if (dataToUpdate.phone && !dataToUpdate.phone.startsWith('+91')) {
         const digits = dataToUpdate.phone.replace(/\D/g, '');
@@ -72,15 +75,15 @@ export class AgentsAPI {
           dataToUpdate.phone = `+91-${digits}`;
         }
       }
-      
+
       const result = await collection.findOneAndUpdate(
-        { _id: new ObjectId(id) },
+        { _id: new ObjectId(id), role: 'agent' }, // Add role: 'agent' to the update query
         { $set: dataToUpdate },
         { returnDocument: 'after' }
       );
 
-      if (!result) {
-        throw new Error('Agent not found');
+      if (!result?.value) { // Check result.value instead of just result
+        throw new Error('Agent not found or not an agent'); // More specific error message
       }
 
       // Return the updated agent object
@@ -93,7 +96,7 @@ export class AgentsAPI {
       const { _id, ...agentWithoutId } = updatedAgent;
 
       return agentWithoutId as Agent; // Ensure the returned object matches the Agent type
-      
+
     } catch (error) {
       console.error('Error updating agent:', error);
       throw new Error('Failed to update agent');
@@ -105,11 +108,11 @@ export class AgentsAPI {
       if (!ObjectId.isValid(id)) {
         return false;
       }
-      
+
       const collection = await this.getCollection();
-      // Soft delete by setting active to false
+      // Soft delete by setting active to false, and ensure it's an agent
       const result = await collection.updateOne(
-        { _id: new ObjectId(id) },
+        { _id: new ObjectId(id), role: 'agent' }, // Add role: 'agent' to the delete query
         { $set: { active: false } }
       );
       return result.modifiedCount === 1;
