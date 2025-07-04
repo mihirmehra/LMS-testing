@@ -193,7 +193,6 @@ export function RegisterForm() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="agent">Agent</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
