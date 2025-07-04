@@ -1,106 +1,109 @@
-// app/leads/home/page.tsx
+// pages/cold-leads/index.tsx
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DashboardMetrics } from '@/components/dashboard/DashboardMetrics';
+import { useState, useEffect, useMemo } from 'react';
+import { useLeads, NewLeadData } from '@/hooks/useLeads';
+import { Lead, LeadFilters as Filters } from '@/types/lead';
 import { LeadCard } from '@/components/leads/LeadCard';
 import { LeadFilters } from '@/components/leads/LeadFilters';
 import { AddLeadModal } from '@/components/leads/AddLeadModal';
-import { LeadImportModal } from '@/components/leads/LeadImportModal';
 import { LeadExportModal } from '@/components/leads/LeadExportModal';
-import { LeadNotesModal } from '@/components/leads/LeadNotesModal'; // Updated import if path changed, but seems correct
-import { LeadTasksModal } from '@/components/leads/LeadTasksModal';
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { Lead, LeadFilters as Filters } from '@/types/lead';
-import { NewLeadData, useLeads } from '@/hooks/useLeads';
-import { useAgents } from '@/hooks/useAgents'; // This seems unused, consider removing if truly not needed
-import { useAuth } from '@/hooks/useAuth';
-import { PermissionService } from '@/lib/permissions';
-import { Plus, Building2, Filter, Loader2, Database, Upload, Download, FileText, CheckSquare, MoreHorizontal } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { toast } from 'sonner'; // For toasts
+import { LeadImportModal } from '@/components/leads/LeadImportModal';
+import { LeadNotesModal } from '@/components/leads/LeadNotesModal'; // New import
+import { LeadTasksModal } from '@/components/leads/LeadTasksModal'; // New import
+import { LeadProfile } from '@/components/leads/LeadProfile';
+import { Button } from '@/components/ui/button';
+import { DashboardMetrics } from '@/components/dashboard/DashboardMetrics'; // New import
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // For sorting
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'; // For quick actions
+import { Card, CardContent } from '@/components/ui/card'; // For no leads found card
+import { Plus, Upload, Download, Filter as FilterIcon, Building2, Loader2, Database, MoreHorizontal, FileText, CheckSquare } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth'; // New import for permissions
+import { PermissionService } from '@/lib/permissions'; // New import for permissions
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'; // New import for protection
+
 
 type SortOption = 'created-desc' | 'created-asc' | 'name-asc' | 'name-desc' | 'score-high' | 'score-low';
 
-export default function HomePage() { // Renamed from Home to HomePage for clarity, though 'Home' is fine
-  const { user } = useAuth();
-  const router = useRouter();
-  const { leads, loading, error, createLead, fetchLeads } = useLeads();
-  const { agents } = useAgents(); // Still present, if not used, can be removed
-  const [filters, setFilters] = useState<Filters>({});
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null); // Track selected lead by ID
+export default function ColdLeadsPage() {
+  const { user } = useAuth(); // Get user for permissions
+  const { leads, loading, error, fetchLeads, createLead, updateLead } = useLeads();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
-  const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<SortOption>('created-desc');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false); // New state
+  const [isTasksModalOpen, setIsTasksModalOpen] = useState(false); // New state
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>('created-desc'); // New state for sorting
+  const [filters, setFilters] = useState<Filters>({});
 
-  const permissionService = PermissionService.getInstance();
+  const permissionService = PermissionService.getInstance(); // Initialize permission service
 
   useEffect(() => {
-    // Fetch 'Lead' type leads when the component mounts
-    fetchLeads('Lead');
+    fetchLeads('Cold-Lead'); // Fetch leads of type 'Cold-Lead' on mount
   }, [fetchLeads]);
 
+  // Filter leads based on user permissions
   const userFilteredLeads = useMemo(() => {
     return permissionService.filterLeadsForUser(leads, user);
   }, [leads, user]);
 
-  useEffect(() => {
-    const handleOpenAddLeadModal = () => {
-      if (permissionService.hasPermission(user, 'leads', 'create')) {
-        setIsAddModalOpen(true);
-      }
-    };
-    window.addEventListener('openAddLeadModal', handleOpenAddLeadModal);
-    return () => {
-      window.removeEventListener('openAddLeadModal', handleOpenAddLeadModal);
-    };
-  }, [user]);
-
   const filteredAndSortedLeads = useMemo(() => {
     let filtered = userFilteredLeads.filter(lead => {
+      // IMPORTANT: Ensure only 'Cold-Lead' types are displayed
+      if (lead.leadType !== 'Cold-Lead') {
+        return false;
+      }
+
+      // Search filter
       if (filters.search) {
         const searchTerm = filters.search.toLowerCase();
         const searchableText = `${lead.name} ${lead.primaryEmail} ${lead.primaryPhone}`.toLowerCase();
         if (!searchableText.includes(searchTerm)) return false;
       }
+
+      // Status filter
       if (filters.status && filters.status.length > 0) {
         if (!filters.status.includes(lead.status)) return false;
       }
+
+      // Agent filter
       if (filters.assignedAgent && lead.assignedAgent !== filters.assignedAgent) {
         return false;
       }
+
+      // Source filter
       if (filters.source && filters.source.length > 0) {
         if (!filters.source.includes(lead.source)) return false;
       }
+
+      // Property type filter
       if (filters.propertyType && filters.propertyType.length > 0) {
         if (!filters.propertyType.includes(lead.propertyType)) return false;
       }
+
+      // Budget range filter
       if (filters.budgetRange && lead.budgetRange !== filters.budgetRange) {
         return false;
       }
+
+      // Lead score filter
       if (filters.leadScore && filters.leadScore.length > 0) {
         if (!filters.leadScore.includes(lead.leadScore)) return false;
       }
-      if (lead.leadType !== 'Lead') {
-        return false;
-      }
+
       return true;
     });
 
     type LeadScore = 'High' | 'Medium' | 'Low';
+
     const scoreOrder: Record<LeadScore, number> = {
       High: 3,
       Medium: 2,
       Low: 1,
     };
 
+    // Sort leads
     filtered.sort((a, b) => {
       const scoreA = a.leadScore as LeadScore;
       const scoreB = b.leadScore as LeadScore;
@@ -121,99 +124,96 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
           return 0;
       }
     });
+
     return filtered;
   }, [userFilteredLeads, filters, sortBy]);
 
+  // Calculate lead counts for status badges (used by LeadFilters)
   const leadCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     userFilteredLeads.forEach(lead => {
-      counts[lead.status] = (counts[lead.status] || 0) + 1;
+      if (lead.leadType === 'Cold-Lead') { // Only count cold leads
+        counts[lead.status] = (counts[lead.status] || 0) + 1;
+      }
     });
     return counts;
   }, [userFilteredLeads]);
 
   const handleAddLead = async (newLeadData: NewLeadData): Promise<Lead> => {
     try {
-      const createdLead = await createLead(newLeadData);
-      console.log('CLIENT: Lead created successfully:', createdLead);
-      toast.success('Lead created successfully!');
-      fetchLeads('Lead'); // Re-fetch leads to update the list
+      const createdLead = await createLead({ ...newLeadData, leadType: 'Cold-Lead' }); // Ensure leadType is 'Cold-Lead'
+      console.log('Cold Lead created successfully:', createdLead);
+      fetchLeads('Cold-Lead'); // Re-fetch cold leads to include the new one
       return createdLead;
-    } catch (error: any) {
-      console.error('CLIENT: Failed to create lead:', error);
-      toast.error(`Failed to create lead: ${error.message || 'Unknown error'}`);
+    } catch (error) {
+      console.error('Failed to create cold lead:', error);
       throw error;
     }
   };
 
-  // Callback for when a lead is updated via LeadNotesModal or LeadTasksModal
-  // This will trigger a re-fetch of the leads list to ensure consistency
-  const handleLeadUpdateFromModal = useCallback((updatedLead: Lead) => {
-    console.log('Lead updated from modal, refreshing list:', updatedLead);
-    fetchLeads('Lead');
-    // Optionally, you might close the modal here if you want:
-    // setIsNotesModalOpen(false);
-    // setIsTasksModalOpen(false);
-  }, [fetchLeads]);
+  const handleUpdateLead = async (updatedLead: Lead) => {
+    try {
+      await updateLead(updatedLead.id, updatedLead);
+      setSelectedLead(updatedLead);
+      fetchLeads('Cold-Lead'); // Re-fetch cold leads after updating to ensure data consistency
+    } catch (error) {
+      console.error('Failed to update cold lead:', error);
+    }
+  };
 
-  const handleViewDetails = useCallback((lead: Lead) => {
+  const handleViewDetails = (lead: Lead) => {
     if (permissionService.canAccessLead(user, lead.assignedAgent)) {
-      router.push(`/leads/${lead.id}`); // Navigate to the dedicated lead profile page
-    } else {
-      toast.error("You don't have permission to view details for this lead.");
+      setSelectedLead(lead);
     }
-  }, [router, user]);
+  };
 
-  const handleEditLead = useCallback((lead: Lead) => {
+  const handleEditLead = (lead: Lead) => {
     if (permissionService.hasPermission(user, 'leads', 'update') &&
-        permissionService.canAccessLead(user, lead.assignedAgent)) {
-      router.push(`/leads/${lead.id}`); // Navigate to the dedicated lead profile page
-    } else {
-      toast.error("You don't have permission to edit this lead.");
+      permissionService.canAccessLead(user, lead.assignedAgent)) {
+      setSelectedLead(lead);
     }
-  }, [router, user]);
+  };
 
   const handleLeadAction = (lead: Lead, action: string) => {
-    if (!permissionService.canAccessLead(user, lead.assignedAgent)) {
-      toast.error("You don't have permission to perform actions on this lead.");
-      return;
-    }
+    setSelectedLead(lead); // Set selected lead for modals
     switch (action) {
       case 'notes':
-        setSelectedLeadId(lead.id);
         setIsNotesModalOpen(true);
         break;
       case 'tasks':
-        setSelectedLeadId(lead.id);
         setIsTasksModalOpen(true);
         break;
       case 'edit':
-        handleEditLead(lead); // This will now navigate
-        break;
-      case 'view':
-        handleViewDetails(lead);
+        handleEditLead(lead);
         break;
     }
   };
 
   const handleImportComplete = (importedCount: number) => {
-    if (importedCount > 0) {
-      toast.success(`${importedCount} leads imported successfully!`);
-    } else {
-      toast.info('No new leads were imported.');
-    }
-    fetchLeads('Lead'); // Re-fetch leads to show imported ones
-    setIsImportModalOpen(false);
+    // Refresh leads after import
+    fetchLeads('Cold-Lead'); // Re-fetch cold leads after import
+    setIsImportModalOpen(false); // Close the modal after import
   };
 
-  // Loading and Error states
+  const handleAddNote = async (note: any) => {
+    if (!selectedLead) return;
+
+    const updatedLead = {
+      ...selectedLead,
+      activities: [note, ...selectedLead.activities],
+      updatedAt: new Date(),
+    };
+
+    await handleUpdateLead(updatedLead);
+  };
+
   if (loading) {
     return (
       <ProtectedRoute>
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="flex items-center space-x-2">
             <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-            <span className="text-gray-600">Loading leads from database...</span>
+            <span className="text-gray-600">Loading cold leads from database...</span>
           </div>
         </div>
       </ProtectedRoute>
@@ -229,11 +229,27 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
               <Database className="h-16 w-16 mx-auto mb-4 text-red-300" />
               <div className="text-red-600 mb-4">Database Connection Error</div>
               <p className="text-gray-600 mb-4">{error}</p>
-              <Button onClick={() => fetchLeads('Lead')}>
+              <Button onClick={() => fetchLeads('Cold-Lead')}>
                 Try Again
               </Button>
             </CardContent>
           </Card>
+        </div>
+      </ProtectedRoute>
+    );
+  }
+
+  if (selectedLead && !isNotesModalOpen && !isTasksModalOpen) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gray-50">
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <LeadProfile
+              lead={selectedLead}
+              onBack={() => setSelectedLead(null)}
+              onUpdateLead={handleUpdateLead}
+            />
+          </div>
         </div>
       </ProtectedRoute>
     );
@@ -250,15 +266,8 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
                 <Building2 className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">
-                  {user?.role === 'agent' ? 'My Leads' : 'Leads Management'}
-                </h1>
-                <p className="text-gray-600">
-                  {user?.role === 'agent'
-                    ? 'Manage your assigned leads and track conversions'
-                    : 'Manage your real estate leads and track conversions'
-                  }
-                </p>
+                <h1 className="text-3xl font-bold text-gray-900">Cold Leads</h1>
+                <p className="text-gray-600">Manage your cold real estate prospects</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
@@ -290,14 +299,14 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
                   className="bg-blue-600 hover:bg-blue-700 font-medium"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add New Lead
+                  Add New Cold Lead
                 </Button>
               )}
             </div>
           </div>
 
           {/* Dashboard Metrics */}
-          <DashboardMetrics />
+          <DashboardMetrics leadTypeFilter="Cold-Lead" />
 
           {/* Filters */}
           <LeadFilters
@@ -309,7 +318,7 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
           {/* Sort and Results */}
           <div className="flex items-center justify-between mb-6">
             <div className="text-sm text-gray-600">
-              Showing {filteredAndSortedLeads.length} of {userFilteredLeads.length} leads
+              Showing {filteredAndSortedLeads.length} of {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length} cold leads
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">Sort by:</span>
@@ -336,8 +345,8 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
                 <div key={lead.id} className="relative group">
                   <LeadCard
                     lead={lead}
-                    onViewDetails={handleViewDetails} // This now navigates
-                    onEditLead={handleEditLead} // This now navigates
+                    onViewDetails={handleViewDetails}
+                    onEditLead={handleEditLead}
                   />
 
                   {/* Quick Actions Overlay */}
@@ -349,10 +358,6 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleLeadAction(lead, 'view')}>
-                          <FileText className="h-4 w-4 mr-2" />
-                          View Details
-                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleLeadAction(lead, 'notes')}>
                           <FileText className="h-4 w-4 mr-2" />
                           View Notes
@@ -378,16 +383,16 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
               <CardContent className="text-center py-12">
                 <Database className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {userFilteredLeads.length === 0 ? 'No leads in database' : 'No leads found'}
+                  {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length === 0 ? 'No cold leads in database' : 'No cold leads found'}
                 </h3>
                 <p className="text-gray-600 mb-6">
-                  {userFilteredLeads.length === 0
+                  {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length === 0
                     ? user?.role === 'agent'
-                      ? "You don't have any leads assigned to you yet. Contact your admin or start adding leads."
-                      : "Your database is empty. Start by adding your first lead to begin managing your real estate prospects."
+                      ? "You don't have any cold leads assigned to you yet. Contact your admin or start adding leads."
+                      : "Your cold leads database is empty. Start by adding your first cold lead to begin managing your real estate prospects."
                     : Object.keys(filters).length > 0 || filters.search
-                      ? "Try adjusting your filters to find leads."
-                      : "No leads match your current criteria."}
+                      ? "Try adjusting your filters to find cold leads."
+                      : "No cold leads match your current criteria."}
                 </p>
                 {permissionService.hasPermission(user, 'leads', 'create') && (
                   <div className="flex items-center justify-center space-x-3">
@@ -396,9 +401,9 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
                       className="bg-blue-600 hover:bg-blue-700"
                     >
                       <Plus className="h-4 w-4 mr-2" />
-                      {userFilteredLeads.length === 0 ? 'Add Your First Lead' : 'Add New Lead'}
+                      {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length === 0 ? 'Add Your First Cold Lead' : 'Add New Cold Lead'}
                     </Button>
-                    {userFilteredLeads.length === 0 && (
+                    {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length === 0 && (
                       <Button
                         variant="outline"
                         onClick={() => setIsImportModalOpen(true)}
@@ -413,7 +418,7 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
             </Card>
           )}
 
-          {/* Modals (now only for Add, Import, Export, Notes, Tasks) */}
+          {/* Modals */}
           {permissionService.hasPermission(user, 'leads', 'create') && (
             <>
               <AddLeadModal
@@ -431,27 +436,25 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
               <LeadExportModal
                 open={isExportModalOpen}
                 onOpenChange={setIsExportModalOpen}
-                leads={userFilteredLeads}
+                leads={filteredAndSortedLeads} // Export only currently filtered/sorted cold leads
               />
             </>
           )}
 
-          {/* Notes and Tasks modals still handled here, requiring selectedLeadId */}
-          {selectedLeadId && (
+          {selectedLead && (
             <>
               <LeadNotesModal
                 open={isNotesModalOpen}
                 onOpenChange={setIsNotesModalOpen}
-                leadId={selectedLeadId} // Pass ID instead of full lead object
-                onLeadUpdate={handleLeadUpdateFromModal} // Handle lead update from modal
+                lead={selectedLead}
+                onAddNote={handleAddNote}
               />
 
-              {/* <LeadTasksModal
+              <LeadTasksModal
                 open={isTasksModalOpen}
                 onOpenChange={setIsTasksModalOpen}
-                leadId={selectedLeadId} // Pass ID instead of full lead object
-                onLeadUpdate={handleLeadUpdateFromModal} // Assuming LeadTasksModal will also have this prop
-              /> */}
+                lead={selectedLead}
+              />
             </>
           )}
         </div>

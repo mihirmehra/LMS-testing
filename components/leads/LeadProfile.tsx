@@ -1,6 +1,7 @@
+// components/leads/LeadProfile.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,18 +14,20 @@ import { Lead, Activity } from '@/types/lead';
 import { CommunicationActivity } from '@/types/communication';
 import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
-import { 
-  ArrowLeft, Phone, Mail, MapPin, DollarSign, Calendar, User, 
-  Building, FileText, Plus, Clock, CheckCircle2, MessageCircle 
+import {
+  ArrowLeft, Phone, Mail, MapPin, DollarSign, Calendar, User,
+  Building, FileText, Plus, Clock, CheckCircle2, MessageCircle
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface LeadProfileProps {
   lead: Lead;
   onBack: () => void;
-  onUpdateLead: (lead: Lead) => void;
+  onUpdateLead: (lead: Lead) => Promise<void>;
+  onLeadRefresh: () => Promise<void>;
 }
 
-export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
+export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadProfileProps) {
 
   type StatusType = "New" | "Contacted" | "Qualified" | "Nurturing" | "Site Visit Scheduled" | "Site Visited" | "Negotiation" | "Converted" | "Lost" | "Hold";
 
@@ -32,50 +35,47 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
   const permissionService = PermissionService.getInstance();
   const [agents, setAgents] = useState<any[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
-  
+
   const [newNote, setNewNote] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<StatusType>(lead.status as StatusType);
   const [selectedAgent, setSelectedAgent] = useState(lead.assignedAgent || 'unassigned');
+  // Initialize communicationActivities from lead's activities that are communication-related
   const [communicationActivities, setCommunicationActivities] = useState<CommunicationActivity[]>([]);
 
-  
-
-  // Fetch agents (users with role 'agent') when component mounts
   useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        setLoadingAgents(true);
+        const response = await fetch('/api/users', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          },
+        });
+
+        if (response.ok) {
+          const users = await response.json();
+          const agentUsers = users.filter((u: any) => u.role === 'agent' && u.isActive);
+          setAgents(agentUsers);
+        } else {
+          console.error('Failed to fetch agents');
+          toast.error("Failed to fetch agents.");
+          setAgents([]);
+        }
+      } catch (error) {
+        console.error('Error fetching agents:', error);
+        toast.error("Error fetching agents.");
+        setAgents([]);
+      } finally {
+        setLoadingAgents(false);
+      }
+    };
     fetchAgents();
   }, []);
 
-  const fetchAgents = async () => {
-    try {
-      setLoadingAgents(true);
-      const response = await fetch('/api/users', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
-      });
-      
-      if (response.ok) {
-        const users = await response.json();
-        // Filter to only include users with role 'agent'
-        const agentUsers = users.filter((u: any) => u.role === 'agent' && u.isActive);
-        setAgents(agentUsers);
-      } else {
-        console.error('Failed to fetch agents');
-        setAgents([]);
-      }
-    } catch (error) {
-      console.error('Error fetching agents:', error);
-      setAgents([]);
-    } finally {
-      setLoadingAgents(false);
-    }
-  };
-
   const assignedAgent = agents.find(agent => agent.id === lead.assignedAgent);
 
-  // Check permissions
   const canEditLead = permissionService.canEditLead(user, lead.assignedAgent, lead.createdBy);
   const canAssignLeads = permissionService.canAssignLeads(user);
 
@@ -95,9 +95,17 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
     return colors[status as keyof typeof colors] || colors['New'];
   };
 
-  const handleSaveChanges = () => {
+  const getLeadTypeColor = (type: 'Lead' | 'Cold-Lead') => {
+    switch (type) {
+      case 'Lead': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'Cold-Lead': return 'bg-gray-100 text-gray-700 border-gray-300';
+      default: return 'bg-gray-100 text-gray-700 border-gray-300';
+    }
+  };
+
+  const handleSaveChanges = useCallback(async () => {
     if (!canEditLead) {
-      alert('You do not have permission to edit this lead');
+      toast.error('You do not have permission to edit this lead');
       return;
     }
 
@@ -107,52 +115,81 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
       assignedAgent: selectedAgent === 'unassigned' ? undefined : selectedAgent,
       updatedAt: new Date(),
     };
-    onUpdateLead(updatedLead);
-  };
+    await onUpdateLead(updatedLead);
+    toast.success("Lead changes saved!");
+    await onLeadRefresh();
+  }, [lead, selectedStatus, selectedAgent, canEditLead, onUpdateLead, onLeadRefresh]);
 
-  const handleAddNote = () => {
-    if (!newNote.trim() || !canEditLead) return;
-    
+  const handleAddNote = useCallback(async () => {
+    if (!newNote.trim() || !canEditLead) {
+      if (!newNote.trim()) {
+        toast.info("Note cannot be empty.");
+      } else {
+        toast.error('You do not have permission to add notes to this lead');
+      }
+      return;
+    }
+
     const newActivity: Activity = {
-      id: `${lead.id}-activity-${Date.now()}`,
-      type: 'Note',
+      id: `${lead.id}-note-${Date.now()}`,
+      type: 'Note', // Note type is always 'Note'
       description: newNote,
       date: new Date(),
       agent: user?.name || 'Current User',
     };
 
-    const updatedLead = {
+    const updatedLeadWithNote = {
       ...lead,
-      activities: [newActivity, ...lead.activities],
+      activities: [newActivity, ...(lead.activities || [])],
       updatedAt: new Date(),
     };
 
-    onUpdateLead(updatedLead);
+    await onUpdateLead(updatedLeadWithNote);
     setNewNote('');
-  };
+    toast.success("Note added successfully!");
+    await onLeadRefresh();
+  }, [newNote, canEditLead, lead, user, onUpdateLead, onLeadRefresh]);
 
-  const handleCommunicationActivity = (activity: CommunicationActivity) => {
+
+  const handleCommunicationActivity = useCallback(async (activity: CommunicationActivity) => {
     setCommunicationActivities(prev => [activity, ...prev]);
-    
-    // Also add to lead activities
+
+    // Map the incoming communication activity type to a compatible Activity type
+    let mappedType: Activity['type'];
+    switch (activity.type) {
+      case 'call':
+        mappedType = 'Call';
+        break;
+      case 'email':
+        mappedType = 'Email';
+        break;
+      case 'calendar':
+        mappedType = 'Meeting'; // Map 'calendar' to 'Meeting' for general activities
+        break;
+      default:
+        mappedType = 'Note'; // Fallback to 'Note' if type is unknown
+    }
+
     const leadActivity: Activity = {
       id: activity.id,
-      type: activity.type === 'whatsapp' ? 'Note' : 'Note',
+      type: mappedType, // Use the mapped type here
       description: activity.content || '',
       date: activity.timestamp,
       agent: activity.agent,
     };
 
-    const updatedLead = {
+    const updatedLeadWithComms = {
       ...lead,
-      activities: [leadActivity, ...lead.activities],
+      activities: [leadActivity, ...(lead.activities || [])],
       updatedAt: new Date(),
     };
 
-    onUpdateLead(updatedLead);
-  };
+    await onUpdateLead(updatedLeadWithComms);
+    toast.success("Communication activity logged!");
+    await onLeadRefresh();
+  }, [lead, onUpdateLead, onLeadRefresh]);
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date | string) => {
     return new Intl.DateTimeFormat('en-IN', {
       year: 'numeric',
       month: 'short',
@@ -163,7 +200,6 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
   };
 
   const formatCurrency = (amount: string) => {
-    // Convert dollar amounts to rupees for display
     if (amount.includes('$')) {
       return amount.replace(/\$/g, '₹').replace(/,/g, ',');
     }
@@ -179,26 +215,54 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
       'Status Change': CheckCircle2,
       'Property Shown': Building,
       'whatsapp': MessageCircle,
-      'calendar': Calendar,
+      'calendar': Calendar, // 'calendar' is used for icon mapping
     };
+    // Use the raw type for icon mapping, assuming your icons object handles both cases if needed,
+    // or you might want to map here as well. For now, matching the Activity['type']
     const Icon = icons[type as keyof typeof icons] || FileText;
     return <Icon className="h-4 w-4" />;
   };
 
+  // Combine and sort all activities (communication + general lead activities)
   const allActivities = [
-    ...communicationActivities.map(ca => ({
-      id: ca.id,
-      type: ca.type,
-      description: ca.content || '',
-      date: ca.timestamp,
-      agent: ca.agent,
-    })),
-    ...lead.activities
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // Process communicationActivities to ensure their types match Activity['type'] for display
+    ...(communicationActivities || []).map(ca => {
+      let mappedDisplayType: Activity['type'];
+      switch (ca.type) {
+        case 'call':
+          mappedDisplayType = 'Call';
+          break;
+        case 'email':
+          mappedDisplayType = 'Email';
+          break;
+        case 'calendar':
+          mappedDisplayType = 'Meeting';
+          break;
+        default:
+          mappedDisplayType = 'Note';
+      }
+      return {
+        id: ca.id,
+        type: mappedDisplayType, // Use the mapped type for display
+        description: ca.content || '',
+        date: ca.timestamp,
+        agent: ca.agent,
+      };
+    }),
+    // Existing lead.activities
+    ...(lead.activities || []).map(la => ({
+      id: la.id,
+      type: la.type,
+      description: la.description,
+      date: la.date,
+      agent: la.agent,
+    }))
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .filter((v, i, a) => a.findIndex(t => (t.id === v.id && t.type === v.type)) === i);
+
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <Button
           variant="ghost"
@@ -215,7 +279,6 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
         )}
       </div>
 
-      {/* Lead Header */}
       <Card className="border-0 shadow-md">
         <CardHeader>
           <div className="flex items-start justify-between">
@@ -235,15 +298,20 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
                     {lead.status}
                   </Badge>
                   <Badge variant="outline" className={`
-                    ${lead.leadScore === 'High' ? 'text-red-600 bg-red-50' : 
-                      lead.leadScore === 'Medium' ? 'text-amber-600 bg-amber-50' : 
-                      'text-green-600 bg-green-50'} font-medium
+                    ${lead.leadScore === 'High' ? 'text-red-600 bg-red-50' :
+                      lead.leadScore === 'Medium' ? 'text-amber-600 bg-amber-50' :
+                        'text-green-600 bg-green-50'} font-medium
                   `}>
                     {lead.leadScore} Priority
                   </Badge>
                   <Badge variant="outline" className="font-medium">
                     {lead.propertyType}
                   </Badge>
+                  {lead.leadType && (
+                    <Badge variant="outline" className={`${getLeadTypeColor(lead.leadType)} font-medium`}>
+                      {lead.leadType.replace('-', ' ')}
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>
@@ -251,11 +319,8 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
         </CardHeader>
       </Card>
 
-      {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Lead Details */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Contact Information */}
           <Card className="border-0 shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -289,7 +354,6 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
             </CardContent>
           </Card>
 
-          {/* Property Preferences */}
           <Card className="border-0 shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -315,7 +379,6 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
             </CardContent>
           </Card>
 
-          {/* Assignment & Status - Only show if user can edit */}
           {canEditLead && (
             <Card className="border-0 shadow-md">
               <CardHeader>
@@ -333,10 +396,10 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {['New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled', 
+                        {['New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled',
                           'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'].map(status => (
-                          <SelectItem key={status} value={status}>{status}</SelectItem>
-                        ))}
+                            <SelectItem key={status} value={status}>{status}</SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -371,7 +434,6 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
             </Card>
           )}
 
-          {/* Activities and Notes */}
           <Tabs defaultValue="activities" className="space-y-4">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="activities">Activities & Timeline</TabsTrigger>
@@ -468,10 +530,9 @@ export function LeadProfile({ lead, onBack, onUpdateLead }: LeadProfileProps) {
           </Tabs>
         </div>
 
-        {/* Right Column - Communication Panel */}
         <div className="lg:col-span-1">
-          <CommunicationPanel 
-            lead={lead} 
+          <CommunicationPanel
+            lead={lead}
             onActivityAdded={handleCommunicationActivity}
           />
         </div>

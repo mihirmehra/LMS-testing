@@ -1,7 +1,31 @@
-// api/leads.ts
+// lib/api/leads.ts
+
 import { getDatabase } from '@/lib/mongodb';
-import { Lead, Activity } from '@/types/lead'; // Ensure Activity is imported from your types file
+import { Lead, Activity } from '@/types/lead';
 import { ObjectId } from 'mongodb';
+
+// Define the structure for lead data coming from CSV, before full conversion to Lead type
+interface CsvLeadData {
+  name: string;
+  email: string;
+  phone: string;
+  'property type'?: string;
+  'budget range'?: string;
+  'preferred locations'?: string;
+  source?: string;
+  status?: string;
+  'lead score'?: string;
+  'lead type'?: string;
+  notes?: string;
+}
+
+// Define valid options for enums to ensure type safety
+const VALID_PROPERTY_TYPES = ['Residential', 'Commercial', 'Land'] as const;
+const VALID_SOURCES = ['Website', 'Referral', 'Social Media', 'Walk-in', 'Advertisement', 'Other'] as const;
+const VALID_STATUSES = ['New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled', 'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'] as const;
+const VALID_LEAD_SCORES = ['High', 'Medium', 'Low'] as const;
+const VALID_LEAD_TYPES = ['Lead', 'Cold-Lead'] as const;
+
 
 export class LeadsAPI {
   private static async getCollection() {
@@ -9,10 +33,21 @@ export class LeadsAPI {
     return db.collection('leads');
   }
 
-  static async getAllLeads(): Promise<Lead[]> {
+  /**
+   * Fetches leads, optionally filtered by leadType.
+   * @param filterOptions An object containing optional filters like leadType.
+   * @returns A promise that resolves to an array of Lead objects.
+   */
+  static async getLeads(filterOptions?: { leadType?: 'Lead' | 'Cold-Lead' }): Promise<Lead[]> {
     try {
       const collection = await this.getCollection();
-      const leads = await collection.find({}).sort({ createdAt: -1 }).toArray();
+      const query: { leadType?: 'Lead' | 'Cold-Lead' } = {};
+
+      if (filterOptions?.leadType) {
+        query.leadType = filterOptions.leadType;
+      }
+
+      const leads = await collection.find(query).sort({ createdAt: -1 }).toArray();
 
       return leads.map(lead => {
         const {
@@ -72,10 +107,19 @@ export class LeadsAPI {
     }
   }
 
+  /**
+   * Creates a new lead.
+   * Now requires `leadType` in `leadData`.
+   */
   static async createLead(leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'lastContacted' | 'activities' | 'attachments'> & { activities?: any[], attachments?: string[] }): Promise<Lead> {
     try {
       const collection = await this.getCollection();
       const now = new Date();
+
+      // Ensure leadType is provided
+      if (!leadData.hasOwnProperty('leadType')) {
+        throw new Error('leadType is required when creating a lead.');
+      }
 
       const newLeadDocument = {
         ...leadData,
@@ -103,11 +147,11 @@ export class LeadsAPI {
       createdLead.createdAt = new Date(createdLead.createdAt);
       createdLead.updatedAt = new Date(createdLead.updatedAt);
       if (createdLead.lastContacted) {
-          createdLead.lastContacted = new Date(createdLead.lastContacted);
+        createdLead.lastContacted = new Date(createdLead.lastContacted);
       }
       createdLead.activities = createdLead.activities?.map((activity: any) => ({
-          ...activity,
-          date: new Date(activity.date)
+        ...activity,
+        date: new Date(activity.date)
       }) as Activity) || [];
 
       return createdLead;
@@ -138,21 +182,25 @@ export class LeadsAPI {
 
       // Handle updating specific fields that might be Date objects or arrays
       const finalUpdatePayload: any = {
-          ...dataToUpdate,
-          updatedAt: now // Always update `updatedAt` on modifications
+        ...dataToUpdate,
+        updatedAt: now // Always update `updatedAt` on modifications
       };
 
       // If lastContacted is provided in updateData, ensure it's a Date object
       if (updateData.lastContacted !== undefined) {
-          finalUpdatePayload.lastContacted = updateData.lastContacted ? new Date(updateData.lastContacted) : undefined;
+        finalUpdatePayload.lastContacted = updateData.lastContacted ? new Date(updateData.lastContacted) : undefined;
       }
       // Handle array updates if they are part of the `dataToUpdate`
       if (updateData.preferredLocations !== undefined) {
-          finalUpdatePayload.preferredLocations = updateData.preferredLocations;
+        finalUpdatePayload.preferredLocations = updateData.preferredLocations;
       }
       // Ensure 'notes' is handled if it can be empty string but not null/undefined
       if (updateData.notes !== undefined) {
-          finalUpdatePayload.notes = updateData.notes;
+        finalUpdatePayload.notes = updateData.notes;
+      }
+      // leadType can also be updated
+      if (updateData.leadType !== undefined) {
+        finalUpdatePayload.leadType = updateData.leadType;
       }
 
 
@@ -254,5 +302,97 @@ export class LeadsAPI {
       }
       throw new Error('Failed to add activity to lead');
     }
+  }
+
+  /**
+   * Bulk creates leads from CSV data.
+   * @param leadsData An array of objects parsed from CSV, representing lead information.
+   * @returns An object with total, successful, failed counts and an array of errors.
+   */
+  static async bulkCreateLeads(leadsData: CsvLeadData[]): Promise<{ total: number; successful: number; failed: number; errors: string[] }> {
+    console.log("[LeadsAPI] Starting bulkCreateLeads. Total records received:", leadsData.length);
+    const total = leadsData.length;
+    let successful = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    const collection = await this.getCollection();
+    const now = new Date();
+
+    for (let i = 0; i < leadsData.length; i++) {
+      const leadData = leadsData[i];
+      const rowNumber = i + 2; // +1 for 0-index to 1-index, +1 for skipping header row
+
+      // Basic validation for required fields
+      if (!leadData.name || !leadData.email || !leadData.phone) {
+        failed++;
+        errors.push(`Row ${rowNumber}: Missing required fields (name, email, or phone).`);
+        console.warn(`[LeadsAPI] Row ${rowNumber}: Skipping due to missing required fields.`);
+        continue;
+      }
+
+      try {
+        // Safely map and cast CSV column names to Lead interface properties
+        // Use type guards or conditional checks to ensure assignment to union types
+        const propertyType: Lead['propertyType'] = (VALID_PROPERTY_TYPES.includes(leadData['property type'] as any)
+          ? leadData['property type']
+          : 'Unknown') as Lead['propertyType']; // 'Unknown' or a suitable default from your enum
+
+        const source: Lead['source'] = (VALID_SOURCES.includes(leadData.source as any)
+          ? leadData.source
+          : 'Other') as Lead['source']; // 'Other' or a suitable default from your enum
+
+        const status: Lead['status'] = (VALID_STATUSES.includes(leadData.status as any)
+          ? leadData.status
+          : 'New') as Lead['status'];
+
+        const leadScore: Lead['leadScore'] = (VALID_LEAD_SCORES.includes(leadData['lead score'] as any)
+          ? leadData['lead score']
+          : 'Low') as Lead['leadScore'];
+
+        const leadType: 'Lead' | 'Cold-Lead' = (VALID_LEAD_TYPES.includes(leadData['lead type'] as any)
+          ? leadData['lead type']
+          : 'Lead') as 'Lead' | 'Cold-Lead';
+
+
+        const newLead: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'lastContacted' | 'activities' | 'attachments'> = {
+          name: leadData.name,
+          primaryEmail: leadData.email,
+          primaryPhone: leadData.phone,
+          propertyType: propertyType,
+          budgetRange: leadData['budget range'] || 'Not Specified',
+          preferredLocations: leadData['preferred locations'] ? leadData['preferred locations'].split(',').map(loc => loc.trim()).filter(Boolean) : [],
+          source: source,
+          status: status,
+          leadScore: leadScore,
+          leadType: leadType,
+          notes: leadData.notes || '',
+          assignedAgent: undefined,
+        };
+        console.log(`[LeadsAPI] Row ${rowNumber}: Preparing to insert lead:`, newLead.name);
+
+        const result = await collection.insertOne({
+          ...newLead,
+          activities: [],
+          attachments: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        if (result.acknowledged) {
+          successful++;
+          console.log(`[LeadsAPI] Row ${rowNumber}: Successfully inserted.`);
+        } else {
+          failed++;
+          errors.push(`Row ${rowNumber}: Failed to insert into database.`);
+          console.error(`[LeadsAPI] Row ${rowNumber}: Failed to acknowledge insert.`);
+        }
+      } catch (error: any) {
+        console.error(`[LeadsAPI] Row ${rowNumber}: Error processing lead:`, error);
+        failed++;
+        errors.push(`Row ${rowNumber}: ${error.message || 'An unexpected error occurred during insertion.'}`);
+      }
+    }
+    console.log(`[LeadsAPI] Bulk import finished. Successful: ${successful}, Failed: ${failed}, Total: ${total}.`);
+    return { total, successful, failed, errors };
   }
 }

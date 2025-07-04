@@ -1,3 +1,4 @@
+// components/leads/LeadFilters.tsx
 'use client';
 
 import { useState } from 'react';
@@ -27,6 +28,8 @@ const statusOptions = [
 const sourceOptions = ['Website', 'Referral', 'Social Media', 'Walk-in', 'Advertisement', 'Other'];
 const propertyTypeOptions = ['Residential', 'Commercial', 'Land'];
 const leadScoreOptions = ['High', 'Medium', 'Low'];
+// FIX: Explicitly type leadTypeOptions as an array of 'Lead' | 'Cold-Lead'
+const leadTypeOptions: Array<'Lead' | 'Cold-Lead'> = ['Lead', 'Cold-Lead']; 
 
 export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFiltersProps) {
   const { agents } = useAgents();
@@ -37,7 +40,17 @@ export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFilter
   };
 
   const clearFilters = () => {
-    onFiltersChange({});
+    onFiltersChange({
+      search: undefined,
+      status: undefined,
+      assignedAgent: undefined,
+      source: undefined,
+      propertyType: undefined,
+      budgetRange: undefined,
+      leadScore: undefined,
+      leadType: undefined, 
+      dateRange: undefined, 
+    });
   };
 
   const hasActiveFilters = Object.values(filters).some(value => 
@@ -52,6 +65,7 @@ export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFilter
     filters.budgetRange ? 1 : 0,
     filters.leadScore?.length || 0,
     filters.search ? 1 : 0,
+    filters.leadType?.length || 0,
   ].reduce((sum, count) => sum + count, 0);
 
   return (
@@ -92,7 +106,6 @@ export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFilter
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
@@ -103,7 +116,6 @@ export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFilter
           />
         </div>
 
-        {/* Quick Status Filters */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">Status</Label>
           <div className="flex flex-wrap gap-2">
@@ -134,7 +146,6 @@ export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFilter
 
         {isExpanded && (
           <>
-            {/* Agent Assignment */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Assigned Agent</Label>
@@ -178,7 +189,6 @@ export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFilter
               </div>
             </div>
 
-            {/* Source */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Lead Source</Label>
               <div className="flex flex-wrap gap-2">
@@ -202,7 +212,6 @@ export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFilter
               </div>
             </div>
 
-            {/* Property Type and Lead Score */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Property Type</Label>
@@ -246,6 +255,32 @@ export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFilter
                       />
                       <Label htmlFor={`score-${score}`} className="text-sm">
                         {score} Priority
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ADDED: Lead Type Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Lead Type</Label>
+                <div className="space-y-2">
+                  {leadTypeOptions.map(type => (
+                    <div key={type} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`leadType-${type}`}
+                        checked={filters.leadType?.includes(type) || false}
+                        onCheckedChange={(checked) => {
+                          const currentTypes = filters.leadType || [];
+                          // 'type' is now correctly typed as 'Lead' | 'Cold-Lead'
+                          const newTypes = checked
+                            ? [...currentTypes, type] 
+                            : currentTypes.filter(t => t !== type);
+                          updateFilters({ leadType: newTypes });
+                        }}
+                      />
+                      <Label htmlFor={`leadType-${type}`} className="text-sm">
+                        {type.replace('-', ' ')}
                       </Label>
                     </div>
                   ))}

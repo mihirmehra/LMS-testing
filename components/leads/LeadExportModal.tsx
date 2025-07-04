@@ -1,3 +1,4 @@
+// components/leads/LeadExportModal.tsx
 'use client';
 
 import { useState } from 'react';
@@ -26,6 +27,7 @@ export function LeadExportModal({ open, onOpenChange, leads }: LeadExportModalPr
     preferredLocations: true,
     source: true,
     status: true,
+    leadType: true, // ADDED: Lead Type field for selection
     assignedAgent: false,
     leadScore: false,
     notes: false,
@@ -38,6 +40,7 @@ export function LeadExportModal({ open, onOpenChange, leads }: LeadExportModalPr
     propertyType: 'all',
     source: 'all',
     dateRange: '30d',
+    leadType: 'all' as 'all' | 'Lead' | 'Cold-Lead', // ADDED: Lead Type filter state
   });
 
   const [format, setFormat] = useState<'csv' | 'excel'>('csv');
@@ -51,6 +54,7 @@ export function LeadExportModal({ open, onOpenChange, leads }: LeadExportModalPr
     preferredLocations: 'Preferred Locations',
     source: 'Lead Source',
     status: 'Status',
+    leadType: 'Lead Type', // ADDED: Label for Lead Type
     assignedAgent: 'Assigned Agent',
     leadScore: 'Lead Score',
     notes: 'Notes',
@@ -87,6 +91,11 @@ export function LeadExportModal({ open, onOpenChange, leads }: LeadExportModalPr
     // Apply source filter
     if (filters.source !== 'all') {
       filtered = filtered.filter(lead => lead.source === filters.source);
+    }
+
+    // Apply lead type filter // ADDED: Lead Type Filter Logic
+    if (filters.leadType !== 'all') {
+      filtered = filtered.filter(lead => lead.leadType === filters.leadType);
     }
 
     // Apply date range filter
@@ -152,6 +161,9 @@ export function LeadExportModal({ open, onOpenChange, leads }: LeadExportModalPr
             break;
           case 'status':
             value = lead.status;
+            break;
+          case 'leadType': // ADDED: Handle leadType for CSV generation
+            value = lead.leadType;
             break;
           case 'assignedAgent':
             value = lead.assignedAgent || 'Unassigned';
@@ -278,6 +290,21 @@ export function LeadExportModal({ open, onOpenChange, leads }: LeadExportModalPr
                       <SelectItem value="Referral">Referral</SelectItem>
                       <SelectItem value="Social Media">Social Media</SelectItem>
                       <SelectItem value="Walk-in">Walk-in</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* ADDED: Lead Type Filter */}
+                <div>
+                  <Label>Lead Type</Label>
+                  <Select value={filters.leadType} onValueChange={(value) => setFilters(prev => ({ ...prev, leadType: value as 'all' | 'Lead' | 'Cold-Lead' }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Lead Types</SelectItem>
+                      <SelectItem value="Lead">Lead</SelectItem>
+                      <SelectItem value="Cold-Lead">Cold Lead</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

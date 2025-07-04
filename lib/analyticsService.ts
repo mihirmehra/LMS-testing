@@ -1,3 +1,4 @@
+// lib/analyticsService.ts
 'use client';
 
 import { Lead, Agent } from '@/types/lead';
@@ -101,17 +102,17 @@ export class AnalyticsService {
   }
 
   // Agent Performance Analysis - filtered by user
-  generateAgentPerformance(leads: Lead[], agents: Agent[], filters?: ReportFilters, user?: User | null): AgentPerformance[] {
+  generateAgentPerformance(leads: Lead[], agents: User[], filters?: ReportFilters, user?: User | null): AgentPerformance[] {
     const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
     const filteredLeads = this.applyFilters(userFilteredLeads, filters);
     
     // Filter agents based on user role
-    let relevantAgents = agents.filter(agent => agent.active);
+    let relevantAgents = agents.filter(agent => agent.isActive);
     
     // Agents can only see their own performance
     if (user?.role === 'agent') {
       relevantAgents = agents.filter(agent => 
-        agent.id === user.id || agent.userId === user.id
+        agent.id === user.id || agent.id === user.id
       );
     }
     
@@ -314,47 +315,51 @@ export class AnalyticsService {
     };
   }
 
-  // Dashboard Metrics - filtered by user
-  generateDashboardMetrics(leads: Lead[], user?: User | null): DashboardMetrics {
+  // Dashboard Metrics - filtered by user and additional filters
+  generateDashboardMetrics(leads: Lead[], user?: User | null, filters?: ReportFilters): DashboardMetrics {
     const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
+    // Apply additional filters from the DashboardMetrics component (e.g., leadTypeFilter)
+    const filteredLeads = this.applyFilters(userFilteredLeads, filters);
+
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
 
-    const totalLeads = userFilteredLeads.length;
-    const newLeadsToday = userFilteredLeads.filter(lead => {
+    const totalLeads = filteredLeads.length;
+    const newLeadsToday = filteredLeads.filter(lead => {
       const createdDate = this.safeDate(lead.createdAt);
       return createdDate >= today;
     }).length;
-    const newLeadsThisWeek = userFilteredLeads.filter(lead => {
+    const newLeadsThisWeek = filteredLeads.filter(lead => {
       const createdDate = this.safeDate(lead.createdAt);
       return createdDate >= weekAgo;
     }).length;
-    const newLeadsThisMonth = userFilteredLeads.filter(lead => {
+    const newLeadsThisMonth = filteredLeads.filter(lead => {
       const createdDate = this.safeDate(lead.createdAt);
       return createdDate >= monthAgo;
     }).length;
 
-    const qualifiedLeads = userFilteredLeads.filter(lead => 
+    const qualifiedLeads = filteredLeads.filter(lead => 
       ['Qualified', 'Site Visit Scheduled', 'Site Visited', 'Negotiation'].includes(lead.status)
     ).length;
-    const convertedLeads = userFilteredLeads.filter(lead => lead.status === 'Converted').length;
-    const lostLeads = userFilteredLeads.filter(lead => lead.status === 'Lost').length;
-    const activeLeads = userFilteredLeads.filter(lead => 
+    const convertedLeads = filteredLeads.filter(lead => lead.status === 'Converted').length;
+    const lostLeads = filteredLeads.filter(lead => lead.status === 'Lost').length;
+    const activeLeads = filteredLeads.filter(lead => 
       !['Converted', 'Lost'].includes(lead.status)
     ).length;
 
     const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
     const averageTimeToConvert = this.calculateAverageTimeToConvert(
-      userFilteredLeads.filter(lead => lead.status === 'Converted')
+      filteredLeads.filter(lead => lead.status === 'Converted')
     );
 
     // Find top performing agent and lead source (only for current user's data)
-    const sourceAnalytics = this.generateLeadSourceAnalytics(userFilteredLeads, undefined, user);
+    // Pass the same filters to generateLeadSourceAnalytics to ensure consistency
+    const sourceAnalytics = this.generateLeadSourceAnalytics(filteredLeads, filters, user);
     const topLeadSource = sourceAnalytics.length > 0 ? sourceAnalytics[0].source : 'N/A';
 
-    const recentActivities = userFilteredLeads.reduce((sum, lead) => 
+    const recentActivities = filteredLeads.reduce((sum, lead) => 
       sum + (lead.activities || []).filter(activity => {
         const activityDate = this.safeDate(activity.date);
         return activityDate >= weekAgo;
@@ -412,6 +417,11 @@ export class AnalyticsService {
         if (!filters.statuses.includes(lead.status)) {
           return false;
         }
+      }
+
+      // NEW: Filter by leadType
+      if (filters.leadType && lead.leadType !== filters.leadType) {
+        return false;
       }
 
       return true;

@@ -28,7 +28,7 @@ interface LeadAssignmentProps {
 }
 
 export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
-  const { leads, updateLead } = useLeads();
+  const { leads,  updateLead, fetchLeads } = useLeads();
   const [agents, setAgents] = useState<any[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
@@ -37,11 +37,12 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('unassigned');
+  
 
-  // Fetch agents (users with role 'agent') when component mounts
   useEffect(() => {
+    fetchLeads(); 
     fetchAgents();
-  }, []);
+  }, [fetchLeads]);
 
   const fetchAgents = async () => {
     try {

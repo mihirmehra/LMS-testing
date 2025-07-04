@@ -1,40 +1,58 @@
+// components/dashboard/DashboardMetrics.tsx
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, TrendingUp, Calendar, DollarSign, BarChart3, ArrowRight } from 'lucide-react';
+import { Users, TrendingUp, Calendar, DollarSign, BarChart3, ArrowRight, Loader2 } from 'lucide-react';
 import { useLeads } from '@/hooks/useLeads';
 import { useAuth } from '@/hooks/useAuth';
 import { AnalyticsService } from '@/lib/analyticsService';
 import Link from 'next/link';
+import { ReportFilters } from '@/types/analytics';
+import { useEffect } from 'react';
 
-export function DashboardMetrics() {
-  const { leads, loading } = useLeads();
+interface DashboardMetricsProps {
+  leadTypeFilter?: string; // New prop to filter leads by type
+}
+
+export function DashboardMetrics({ leadTypeFilter }: DashboardMetricsProps) {
+  const { leads, loading, error, fetchLeads } = useLeads();
   const { user } = useAuth();
-  
-  if (loading) {
+
+  useEffect(() => {
+    // Fetch leads based on the leadTypeFilter prop, or 'Lead' as a default
+    fetchLeads((leadTypeFilter as 'Lead' | 'Cold-Lead' | undefined) || 'Lead');
+  }, [fetchLeads, leadTypeFilter]); // Add leadTypeFilter to dependency array
+
+  // Debugging logs
+  console.log('DashboardMetrics - Loading:', loading);
+  console.log('DashboardMetrics - Leads:', leads);
+  console.log('DashboardMetrics - User:', user);
+
+  const analyticsService = AnalyticsService.getInstance();
+
+  // Create filters for analytics service, including the leadTypeFilter
+  const filters: ReportFilters = { leadType: leadTypeFilter || 'Lead' }; // Use leadTypeFilter here
+
+  const dashboardMetrics = analyticsService.generateDashboardMetrics(leads, user, filters); // Pass filters to ensure correct lead type calculation
+  const leadSourceAnalytics = analyticsService.generateLeadSourceAnalytics(leads, filters, user); // Pass filters here too
+
+  console.log('DashboardMetrics - analyticsService:', analyticsService);
+  console.log('DashboardMetrics - dashboardMetrics:', dashboardMetrics);
+  console.log('DashboardMetrics - leadSourceAnalytics:', leadSourceAnalytics);
+
+  // Check if dashboardMetrics is defined
+  if (!dashboardMetrics) {
+    console.error('Dashboard metrics could not be generated.');
+    // Optionally render a more user-friendly loading/error state if metrics are null initially
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[...Array(4)].map((_, i) => (
-          <Card key={i} className="border-0 shadow-md animate-pulse">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="h-4 bg-gray-200 rounded w-20"></div>
-              <div className="h-4 w-4 bg-gray-200 rounded"></div>
-            </CardHeader>
-            <CardContent>
-              <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
-              <div className="h-3 bg-gray-200 rounded w-24"></div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="text-center py-10 text-gray-500">
+        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+        <p>Calculating dashboard metrics...</p>
       </div>
     );
   }
-
-  const analyticsService = AnalyticsService.getInstance();
-  const dashboardMetrics = analyticsService.generateDashboardMetrics(leads, user);
-  const leadSourceAnalytics = analyticsService.generateLeadSourceAnalytics(leads, undefined, user);
 
   const topSource = leadSourceAnalytics.length > 0 ? leadSourceAnalytics[0] : null;
 
@@ -141,7 +159,7 @@ export function DashboardMetrics() {
                   </div>
                   <div className="text-center">
                     <div className="font-bold text-green-600">{topSource.convertedLeads}</div>
-                    <div className="text-gray-600">Converted</div>
+                    <div className="text-600">Converted</div>
                   </div>
                   <div className="text-center">
                     <div className="font-bold text-purple-600">{topSource.averageTimeToConvert}d</div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export function AnalyticsDashboard() {
-  const { leads, loading: leadsLoading } = useLeads();
+  const { leads, loading: leadsLoading, fetchLeads } = useLeads();
   const { agents, loading: agentsLoading } = useAgents();
   const { user } = useAuth();
   const [filters, setFilters] = useState<ReportFilters>({});
@@ -33,6 +33,11 @@ export function AnalyticsDashboard() {
   const loading = leadsLoading || agentsLoading;
   const analyticsService = AnalyticsService.getInstance();
   const permissionService = PermissionService.getInstance();
+
+  useEffect(() => {
+    fetchLeads(); 
+  }, [fetchLeads]);
+  
 
   // Generate analytics data with user filtering
   const dashboardMetrics = useMemo(() => 

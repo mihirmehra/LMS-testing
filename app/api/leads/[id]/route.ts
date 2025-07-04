@@ -1,8 +1,7 @@
-// pages/api/leads/[id].ts
-
+// app/api/leads/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
-import { getDatabase } from '@/lib/mongodb';
+import { getDatabase } from '@/lib/mongodb'; // Assuming this path is correct for your MongoDB connection
 
 export async function GET(
   request: NextRequest,
@@ -37,7 +36,7 @@ export async function GET(
       );
     }
 
-    // FIX: Use destructuring to exclude _id
+    // Convert _id to string 'id' for consistent client-side usage
     const { _id, ...restOfLead } = lead;
     const formattedLead = { id: _id.toString(), ...restOfLead };
 
@@ -77,15 +76,14 @@ export async function PUT(
     const leadsCollection = db.collection('leads');
 
     // Remove _id from updateData if present, as _id cannot be updated
-    // FIX: Use destructuring for `_id` removal from `updateData`
     const { _id, ...dataToUpdate } = updateData;
 
-    dataToUpdate.updatedAt = new Date(); // Update the timestamp
+    dataToUpdate.updatedAt = new Date(); // Ensure updatedAt is set/updated
 
     const result = await leadsCollection.findOneAndUpdate(
       { _id: new ObjectId(id) },
       { $set: dataToUpdate },
-      { returnDocument: 'after' }
+      { returnDocument: 'after' } // Return the updated document
     );
 
     if (!result?.value) {
@@ -95,7 +93,7 @@ export async function PUT(
       );
     }
 
-    // FIX: Use destructuring to exclude _id from the returned value
+    // Convert _id of the updated document to string 'id'
     const { _id: updatedDocId, ...restOfUpdatedLead } = result.value;
     const updatedLead = { id: updatedDocId.toString(), ...restOfUpdatedLead };
 

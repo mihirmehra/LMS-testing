@@ -1,3 +1,4 @@
+// components/leads/LeadCard.tsx
 'use client';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -42,6 +43,18 @@ export function LeadCard({ lead, onViewDetails, onEditLead }: LeadCardProps) {
     return colors[score as keyof typeof colors] || colors['Medium'];
   };
 
+  // New: Determine color for Lead Type Badge
+  const getLeadTypeColor = (type: 'Lead' | 'Cold-Lead') => {
+    switch (type) {
+      case 'Lead':
+        return 'bg-blue-50 text-blue-700 border-blue-200'; // A distinct color for "Lead"
+      case 'Cold-Lead':
+        return 'bg-gray-200 text-gray-700 border-gray-300'; // A distinct color for "Cold-Lead"
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
   const assignedAgent = agents.find(agent => agent.id === lead.assignedAgent);
   const daysSinceCreated = Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60 * 24));
 
@@ -58,6 +71,10 @@ export function LeadCard({ lead, onViewDetails, onEditLead }: LeadCardProps) {
             <div>
               <h3 className="font-semibold text-lg text-gray-900">{lead.name}</h3>
               <div className="flex items-center space-x-2 mt-1">
+                {/* Display Lead Type Badge */}
+                <Badge className={`text-xs font-medium ${getLeadTypeColor(lead.leadType)}`}>
+                  {lead.leadType.replace('-', ' ')} {/* Display "Cold Lead" instead of "Cold-Lead" */}
+                </Badge>
                 <Badge className={`text-xs font-medium ${getStatusColor(lead.status)}`}>
                   {lead.status}
                 </Badge>
@@ -131,3 +148,9 @@ export function LeadCard({ lead, onViewDetails, onEditLead }: LeadCardProps) {
     </Card>
   );
 }
+
+
+
+
+
+

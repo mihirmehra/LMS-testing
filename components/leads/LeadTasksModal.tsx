@@ -59,75 +59,79 @@ export function LeadTasksModal({ open, onOpenChange, lead }: LeadTasksModalProps
       createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
       completedAt: new Date(),
     },
-  ]);
+  ]); // Initialize with existing lead tasks
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
+  const [newTaskDueDate, setNewTaskDueDate] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
+  const [newTaskAssignedTo, setNewTaskAssignedTo] = useState(user?.id || '');
 
-  const [showAddTask, setShowAddTask] = useState(false);
-  const [newTask, setNewTask] = useState({
-    title: '',
-    description: '',
-    dueDate: '',
-    priority: 'Medium' as Task['priority'],
-  });
+  // Helper to get color for lead type (reused from LeadProfile.tsx logic)
+  const getLeadTypeColor = (type: 'Lead' | 'Cold-Lead') => {
+    switch (type) {
+      case 'Lead': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'Cold-Lead': return 'bg-gray-100 text-gray-700 border-gray-300';
+      default: return 'bg-gray-100 text-gray-700 border-gray-300';
+    }
+  };
+
+  const getPriorityColor = (priority: 'Low' | 'Medium' | 'High') => {
+    switch (priority) {
+      case 'Low': return 'bg-green-100 text-green-800 border-green-200';
+      case 'Medium': return 'bg-amber-100 text-amber-800 border-amber-200';
+      case 'High': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getStatusColor = (status: 'Pending' | 'In Progress' | 'Completed') => {
+    switch (status) {
+      case 'Pending': return 'bg-red-100 text-red-800 border-red-200';
+      case 'In Progress': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'Completed': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
 
   const handleAddTask = () => {
-    if (!newTask.title.trim() || !newTask.dueDate) return;
+    if (!newTaskTitle.trim() || !newTaskDueDate) return;
 
-    const task: Task = {
-      id: `task-${Date.now()}`,
-      title: newTask.title,
-      description: newTask.description,
-      dueDate: new Date(newTask.dueDate),
-      priority: newTask.priority,
+    const newTask: Task = {
+      id: `${lead.id}-task-${Date.now()}`,
+      title: newTaskTitle,
+      description: newTaskDescription,
+      dueDate: new Date(newTaskDueDate),
+      priority: newTaskPriority,
       status: 'Pending',
-      assignedTo: user?.name || 'Current User',
-      createdBy: user?.name || 'Current User',
+      assignedTo: newTaskAssignedTo,
+      createdBy: user?.id || 'unknown',
       createdAt: new Date(),
     };
 
-    setTasks(prev => [task, ...prev]);
-    setNewTask({
-      title: '',
-      description: '',
-      dueDate: '',
-      priority: 'Medium',
-    });
-    setShowAddTask(false);
+    const updatedTasks = [...tasks, newTask];
+    setTasks(updatedTasks);
+    // In a real app, you'd also send this update to your backend
+    // onUpdateLead({ ...lead, tasks: updatedTasks }); // Assuming onUpdateLead could update tasks directly
+    
+    // Clear form
+    setNewTaskTitle('');
+    setNewTaskDescription('');
+    setNewTaskDueDate('');
+    setNewTaskPriority('Medium');
+    setNewTaskAssignedTo(user?.id || '');
   };
 
-  const handleToggleTask = (taskId: string) => {
-    setTasks(prev => prev.map(task => {
-      if (task.id === taskId) {
-        const newStatus = task.status === 'Completed' ? 'Pending' : 'Completed';
-        return {
-          ...task,
-          status: newStatus,
-          completedAt: newStatus === 'Completed' ? new Date() : undefined,
-        };
-      }
-      return task;
-    }));
-  };
-
-  const getPriorityColor = (priority: Task['priority']) => {
-    const colors = {
-      'High': 'bg-red-100 text-red-800 border-red-200',
-      'Medium': 'bg-amber-100 text-amber-800 border-amber-200',
-      'Low': 'bg-green-100 text-green-800 border-green-200',
-    };
-    return colors[priority];
-  };
-
-  const getStatusColor = (status: Task['status']) => {
-    const colors = {
-      'Pending': 'bg-gray-100 text-gray-800 border-gray-200',
-      'In Progress': 'bg-blue-100 text-blue-800 border-blue-200',
-      'Completed': 'bg-green-100 text-green-800 border-green-200',
-    };
-    return colors[status];
-  };
-
-  const isOverdue = (task: Task) => {
-    return task.status !== 'Completed' && new Date(task.dueDate) < new Date();
+  const handleToggleTaskStatus = (taskId: string, currentStatus: Task['status']) => {
+    setTasks(tasks.map(task => 
+      task.id === taskId 
+        ? { 
+            ...task, 
+            status: currentStatus === 'Completed' ? 'Pending' : 'Completed',
+            completedAt: currentStatus === 'Completed' ? undefined : new Date(),
+          } 
+        : task
+    ));
+    // In a real app, you'd send this update to your backend
   };
 
   const formatDate = (date: Date) => {
@@ -141,116 +145,93 @@ export function LeadTasksModal({ open, onOpenChange, lead }: LeadTasksModalProps
   };
 
   const formatDueDate = (date: Date) => {
-    const now = new Date();
-    const dueDate = new Date(date);
-    const diffTime = dueDate.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Due today';
-    if (diffDays === 1) return 'Due tomorrow';
-    if (diffDays > 0) return `Due in ${diffDays} days`;
-    return `Overdue by ${Math.abs(diffDays)} days`;
+    return new Intl.DateTimeFormat('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date(date));
   };
 
-  const pendingTasks = tasks.filter(task => task.status !== 'Completed');
-  const completedTasks = tasks.filter(task => task.status === 'Completed');
-  const overdueTasks = tasks.filter(isOverdue);
+  const isOverdue = (task: Task) => {
+    return task.status !== 'Completed' && new Date(task.dueDate) < new Date();
+  };
+
+  // Sort tasks: In Progress/Pending (overdue first), then Completed
+  const sortedTasks = [...tasks].sort((a, b) => {
+    if (a.status === 'Completed' && b.status !== 'Completed') return 1;
+    if (a.status !== 'Completed' && b.status === 'Completed') return -1;
+    
+    // For non-completed tasks, overdue tasks come first
+    const aOverdue = isOverdue(a);
+    const bOverdue = isOverdue(b);
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+
+    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(); // Sort by due date
+  });
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
-            <CheckSquare className="h-5 w-5 text-blue-600" />
-            <span>Tasks & Follow-ups - {lead.name}</span>
+            <span>Tasks for {lead.name}</span>
+            {lead.leadType && (
+                <Badge variant="outline" className={`${getLeadTypeColor(lead.leadType)} font-medium`}>
+                    {lead.leadType.replace('-', ' ')}
+                </Badge>
+            )}
           </DialogTitle>
           <DialogDescription>
-            Manage tasks and follow-ups for this lead
+            Manage and track all tasks related to this lead.
           </DialogDescription>
         </DialogHeader>
-
-        <div className="space-y-6">
-          {/* Task Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600">{tasks.length}</div>
-                <div className="text-sm text-gray-600">Total Tasks</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-amber-600">{pendingTasks.length}</div>
-                <div className="text-sm text-gray-600">Pending</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-green-600">{completedTasks.length}</div>
-                <div className="text-sm text-gray-600">Completed</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-red-600">{overdueTasks.length}</div>
-                <div className="text-sm text-gray-600">Overdue</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Add New Task */}
-          <Card>
+        
+        <div className="grid gap-4 py-4">
+          {/* Add New Task Form */}
+          <Card className="border-dashed border-2 border-blue-200 bg-blue-50">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center space-x-2">
-                  <Plus className="h-5 w-5" />
-                  <span>Add New Task</span>
-                </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAddTask(!showAddTask)}
-                >
-                  {showAddTask ? 'Cancel' : 'Add Task'}
-                </Button>
-              </div>
+              <CardTitle className="flex items-center space-x-2 text-blue-800">
+                <Plus className="h-5 w-5" />
+                <span>Add New Task</span>
+              </CardTitle>
             </CardHeader>
-            {showAddTask && (
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Task Title</Label>
-                    <Input
-                      placeholder="Enter task title..."
-                      value={newTask.title}
-                      onChange={(e) => setNewTask(prev => ({ ...prev, title: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label>Due Date</Label>
-                    <Input
-                      type="datetime-local"
-                      value={newTask.dueDate}
-                      onChange={(e) => setNewTask(prev => ({ ...prev, dueDate: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="taskTitle">Task Title</Label>
+                <Input
+                  id="taskTitle"
+                  placeholder="e.g., Follow up on site visit"
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="taskDescription">Description (Optional)</Label>
+                <Textarea
+                  id="taskDescription"
+                  placeholder="Add more details about the task..."
+                  value={newTaskDescription}
+                  onChange={(e) => setNewTaskDescription(e.target.value)}
+                  rows={2}
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Description</Label>
-                  <Textarea
-                    placeholder="Task description..."
-                    value={newTask.description}
-                    onChange={(e) => setNewTask(prev => ({ ...prev, description: e.target.value }))}
-                    rows={3}
+                  <Label htmlFor="dueDate">Due Date</Label>
+                  <Input
+                    id="dueDate"
+                    type="date"
+                    value={newTaskDueDate}
+                    onChange={(e) => setNewTaskDueDate(e.target.value)}
                   />
                 </div>
-
                 <div>
-                  <Label>Priority</Label>
-                  <Select value={newTask.priority} onValueChange={(value: Task['priority']) => setNewTask(prev => ({ ...prev, priority: value }))}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
+                  <Label htmlFor="priority">Priority</Label>
+                  <Select value={newTaskPriority} onValueChange={(value: 'Low' | 'Medium' | 'High') => setNewTaskPriority(value)}>
+                    <SelectTrigger id="priority">
+                      <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Low">Low</SelectItem>
@@ -259,64 +240,44 @@ export function LeadTasksModal({ open, onOpenChange, lead }: LeadTasksModalProps
                     </SelectContent>
                   </Select>
                 </div>
-
-                <Button 
-                  onClick={handleAddTask}
-                  disabled={!newTask.title.trim() || !newTask.dueDate}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Task
-                </Button>
-              </CardContent>
-            )}
+              </div>
+              {/* You might want to add an assignedTo select here if users can assign tasks to others */}
+              <Button onClick={handleAddTask} disabled={!newTaskTitle.trim() || !newTaskDueDate} className="bg-blue-600 hover:bg-blue-700 w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Task
+              </Button>
+            </CardContent>
           </Card>
 
-          {/* Tasks List */}
+          {/* Existing Tasks List */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-lg">All Tasks</h3>
-            
-            {tasks.length > 0 ? (
+            <h3 className="text-lg font-semibold text-gray-800">Current Tasks</h3>
+            {sortedTasks.length > 0 ? (
               <div className="space-y-3">
-                {tasks.map((task) => (
-                  <Card key={task.id} className={`${task.status === 'Completed' ? 'opacity-75' : ''} ${isOverdue(task) ? 'border-red-200 bg-red-50' : ''}`}>
+                {sortedTasks.map(task => (
+                  <Card key={task.id} className="shadow-sm">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3 flex-1">
-                          <Checkbox
-                            checked={task.status === 'Completed'}
-                            onCheckedChange={() => handleToggleTask(task.id)}
-                            className="mt-1"
+                        <div className="flex items-center space-x-3">
+                          <Checkbox 
+                            checked={task.status === 'Completed'} 
+                            onCheckedChange={() => handleToggleTaskStatus(task.id, task.status)}
+                            className="w-5 h-5"
                           />
-                          <div className="flex-1">
-                            <h4 className={`font-medium ${task.status === 'Completed' ? 'line-through text-gray-500' : ''}`}>
-                              {task.title}
-                            </h4>
+                          <div>
+                            <p className={`font-medium ${task.status === 'Completed' ? 'line-through text-gray-500' : 'text-gray-900'}`}>{task.title}</p>
                             {task.description && (
                               <p className="text-sm text-gray-600 mt-1">{task.description}</p>
                             )}
-                            <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                              <div className="flex items-center space-x-1">
-                                <User className="h-3 w-3" />
-                                <span>{task.assignedTo}</span>
-                              </div>
-                              <div className="flex items-center space-x-1">
-                                <Calendar className="h-3 w-3" />
-                                <span>{formatDate(task.createdAt)}</span>
-                              </div>
-                            </div>
                           </div>
                         </div>
-                        
-                        <div className="flex flex-col items-end space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <Badge className={getPriorityColor(task.priority)}>
-                              {task.priority}
-                            </Badge>
-                            <Badge className={getStatusColor(task.status)}>
-                              {task.status}
-                            </Badge>
-                          </div>
+                        <div className="flex-shrink-0 text-right space-y-1">
+                          <Badge variant="outline" className={`text-xs ${getPriorityColor(task.priority)}`}>
+                            {task.priority} Priority
+                          </Badge>
+                          <Badge variant="outline" className={`text-xs ${getStatusColor(task.status)}`}>
+                            {task.status}
+                          </Badge>
                           
                           <div className={`text-xs flex items-center space-x-1 ${isOverdue(task) ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                             {isOverdue(task) && <AlertCircle className="h-3 w-3" />}

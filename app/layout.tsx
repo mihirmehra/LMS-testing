@@ -7,7 +7,7 @@ import { ClientLayout } from '@/components/layout/ClientLayout';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'RealEstate CRM - Lead Management System',
+  title: 'Countryroof - Lead Management System',
   description: 'Comprehensive real estate lead management and analytics platform',
 };
 

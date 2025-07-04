@@ -137,4 +137,5 @@ export interface ReportFilters {
   sources?: string[];
   propertyTypes?: string[];
   statuses?: string[];
+  leadType?: string; // New property
 }

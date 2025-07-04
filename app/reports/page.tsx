@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,11 +18,20 @@ import {
 
 export default function ReportsPage() {
   const { user } = useAuth();
-  const { leads, loading: leadsLoading } = useLeads();
+  const { leads, loading: leadsLoading, fetchLeads } = useLeads();
   const { agents, loading: agentsLoading } = useAgents();
   const [selectedPeriod, setSelectedPeriod] = useState<'7d' | '30d' | '90d' | '1y'>('30d');
   const [selectedAgent, setSelectedAgent] = useState<string>('all');
   const [selectedReport, setSelectedReport] = useState<string>('overview');
+
+  
+  // IMPORTANT: Call fetchLeads here to initiate data loading
+  useEffect(() => {
+    fetchLeads(); // Fetch leads of type 'lead' when the component mounts
+  }, [fetchLeads]); // Dependency array includes fetchLeads to re-run if it changes (though it's memoized in useLeads)
+  // *****************************************************************
+
+  console.log('leads', leads)
 
   const loading = leadsLoading || agentsLoading;
   const analyticsService = AnalyticsService.getInstance();
@@ -205,7 +214,7 @@ export default function ReportsPage() {
   ];
 
   // Filter agents for dropdown (agents should not see other agents)
-  const availableAgents = user?.role === 'admin' ? agents : agents.filter(agent => agent.id === user?.id || agent.userId === user?.id);
+  const availableAgents = user?.role === 'admin' ? agents : agents.filter(agent => agent.id === user?.id);
 
   return (
     <ProtectedRoute requiredPermission={{ resource: 'reports', action: 'read' }}>
@@ -519,7 +528,7 @@ export default function ReportsPage() {
                     {user?.role === 'admin' && (
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-600">Active Agents</span>
-                        <span className="font-bold">{agents.filter(a => a.active).length}</span>
+                        <span className="font-bold">{agents.filter(a => a.isActive).length}</span>
                       </div>
                     )}
                   </CardContent>

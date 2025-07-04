@@ -55,7 +55,15 @@ export function Sidebar({ className }: SidebarProps) {
       href: '/',
       icon: Users,
       current: pathname === '/leads' || pathname === '/',
-      badge: '12',
+      badge: null,
+      visible: permissionService.hasPermission(user, 'leads', 'read'),
+    },
+    {
+      name: 'Cold Leads',
+      href: '/cold',
+      icon: Users,
+      current: pathname === '/cold',
+      badge: null,
       visible: permissionService.hasPermission(user, 'leads', 'read'),
     },
     {
@@ -157,7 +165,7 @@ export function Sidebar({ className }: SidebarProps) {
               <Building2 className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">RealEstate CRM</h1>
+              <h1 className="text-lg font-bold text-gray-900">Countryroof</h1>
               <p className="text-xs text-gray-500">Lead Management</p>
             </div>
           </div>

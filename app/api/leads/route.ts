@@ -3,7 +3,7 @@ import { LeadsAPI } from '@/lib/api/leads';
 
 export async function GET() {
   try {
-    const leads = await LeadsAPI.getAllLeads();
+    const leads = await LeadsAPI.getLeads();
     return NextResponse.json(leads);
   } catch (error) {
     console.error('API Error:', error);

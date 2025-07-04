@@ -18,7 +18,8 @@ export interface Lead {
   leadScore: 'High' | 'Medium' | 'Low';
   activities: Activity[];
   attachments: string[];
-  createdBy?: string; // Track who created the lead
+  createdBy?: string; 
+  leadType: 'Lead' | 'Cold-Lead';
 }
 
 export interface Activity {
@@ -36,7 +37,7 @@ export interface Agent {
   email: string;
   phone: string;
   active: boolean;
-  userId?: string; // Link to user record
+  userId?: string; 
 }
 
 export interface LeadFilters {
@@ -46,6 +47,7 @@ export interface LeadFilters {
   propertyType?: string[];
   budgetRange?: string;
   leadScore?: string[];
+  leadType?: Array<'Lead' | 'Cold-Lead'>;
   dateRange?: {
     start: Date;
     end: Date;
