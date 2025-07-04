@@ -321,6 +321,7 @@ export default function CommunicationsPage() {
               leadScore: 'Medium',
               activities: [],
               attachments: [],
+              leadType: 'Cold-Lead',
             }}
           />
         )}
