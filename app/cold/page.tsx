@@ -1,8 +1,8 @@
 // app/cold-leads/page.tsx
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useLeads, NewLeadData } from '@/hooks/useLeads';
 import { Lead, LeadFilters as Filters } from '@/types/lead';
 import { LeadCard } from '@/components/leads/LeadCard';
@@ -12,7 +12,6 @@ import { LeadExportModal } from '@/components/leads/LeadExportModal';
 import { LeadImportModal } from '@/components/leads/LeadImportModal';
 import { LeadNotesModal } from '@/components/leads/LeadNotesModal';
 import { LeadTasksModal } from '@/components/leads/LeadTasksModal';
-// Removed LeadProfile import as it will now be rendered on a separate page
 import { Button } from '@/components/ui/button';
 import { DashboardMetrics } from '@/components/dashboard/DashboardMetrics';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,14 +21,13 @@ import { Plus, Upload, Download, Filter as FilterIcon, Building2, Loader2, Datab
 import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { toast } from 'sonner'; // Ensure toast is imported for notifications
+import { toast } from 'sonner';
 
 
 type SortOption = 'created-desc' | 'created-asc' | 'name-asc' | 'name-desc' | 'score-high' | 'score-low';
 
-// IMPORTANT: Renamed from ColdLeadsPage to follow Next.js app router convention if this is truly the page file
-export default function ColdLeadsPage() { // Assuming this file is at app/cold-leads/page.tsx or similar
-  const router = useRouter(); // Initialize useRouter for navigation
+export default function ColdLeadsPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const { leads, loading, error, fetchLeads, createLead, updateLead } = useLeads();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -37,19 +35,19 @@ export default function ColdLeadsPage() { // Assuming this file is at app/cold-l
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
-  const [selectedLeadForModal, setSelectedLeadForModal] = useState<Lead | null>(null); // Renamed to avoid confusion with detail page 'selectedLead'
+  // Use a state specifically for the ID of the lead selected for a modal
+  const [selectedLeadIdForModal, setSelectedLeadIdForModal] = useState<string | null>(null); // Correct type: string | null
   const [sortBy, setSortBy] = useState<SortOption>('created-desc');
   const [filters, setFilters] = useState<Filters>({});
 
   const permissionService = PermissionService.getInstance();
 
-  // Use useCallback for fetchLeads to prevent unnecessary re-renders of effects depending on it
   const memoizedFetchLeads = useCallback(() => {
     fetchLeads('Cold-Lead');
   }, [fetchLeads]);
 
   useEffect(() => {
-    memoizedFetchLeads(); // Fetch leads of type 'Cold-Lead' on mount
+    memoizedFetchLeads();
   }, [memoizedFetchLeads]);
 
   const userFilteredLeads = useMemo(() => {
@@ -58,89 +56,58 @@ export default function ColdLeadsPage() { // Assuming this file is at app/cold-l
 
   const filteredAndSortedLeads = useMemo(() => {
     let filtered = userFilteredLeads.filter(lead => {
-      // IMPORTANT: Ensure only 'Cold-Lead' types are displayed
       if (lead.leadType !== 'Cold-Lead') {
         return false;
       }
-
-      // Search filter
       if (filters.search) {
         const searchTerm = filters.search.toLowerCase();
         const searchableText = `${lead.name} ${lead.primaryEmail} ${lead.primaryPhone}`.toLowerCase();
         if (!searchableText.includes(searchTerm)) return false;
       }
-
-      // Status filter
       if (filters.status && filters.status.length > 0) {
         if (!filters.status.includes(lead.status)) return false;
       }
-
-      // Agent filter
       if (filters.assignedAgent && lead.assignedAgent !== filters.assignedAgent) {
         return false;
       }
-
-      // Source filter
       if (filters.source && filters.source.length > 0) {
         if (!filters.source.includes(lead.source)) return false;
       }
-
-      // Property type filter
       if (filters.propertyType && filters.propertyType.length > 0) {
         if (!filters.propertyType.includes(lead.propertyType)) return false;
       }
-
-      // Budget range filter
       if (filters.budgetRange && lead.budgetRange !== filters.budgetRange) {
         return false;
       }
-
-      // Lead score filter
       if (filters.leadScore && filters.leadScore.length > 0) {
         if (!filters.leadScore.includes(lead.leadScore)) return false;
       }
-
       return true;
     });
 
     type LeadScore = 'High' | 'Medium' | 'Low';
+    const scoreOrder: Record<LeadScore, number> = { High: 3, Medium: 2, Low: 1 };
 
-    const scoreOrder: Record<LeadScore, number> = {
-      High: 3,
-      Medium: 2,
-      Low: 1,
-    };
-
-    // Sort leads
     filtered.sort((a, b) => {
       const scoreA = a.leadScore as LeadScore;
       const scoreB = b.leadScore as LeadScore;
       switch (sortBy) {
-        case 'created-desc':
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case 'created-asc':
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        case 'name-asc':
-          return a.name.localeCompare(b.name);
-        case 'name-desc':
-          return b.name.localeCompare(a.name);
-        case 'score-high':
-          return scoreOrder[scoreB] - scoreOrder[scoreA];
-        case 'score-low':
-          return scoreOrder[scoreA] - scoreOrder[scoreB];
-        default:
-          return 0;
+        case 'created-desc': return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case 'created-asc': return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case 'name-asc': return a.name.localeCompare(b.name);
+        case 'name-desc': return b.name.localeCompare(a.name);
+        case 'score-high': return scoreOrder[scoreB] - scoreOrder[scoreA];
+        case 'score-low': return scoreOrder[scoreA] - scoreOrder[scoreB];
+        default: return 0;
       }
     });
-
     return filtered;
   }, [userFilteredLeads, filters, sortBy]);
 
-  // Calculate lead counts for status badges (used by LeadFilters)
   const leadCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     userFilteredLeads.forEach(lead => {
-      if (lead.leadType === 'Cold-Lead') { // Only count cold leads
+      if (lead.leadType === 'Cold-Lead') {
         counts[lead.status] = (counts[lead.status] || 0) + 1;
       }
     });
@@ -151,7 +118,7 @@ export default function ColdLeadsPage() { // Assuming this file is at app/cold-l
     try {
       const createdLead = await createLead({ ...newLeadData, leadType: 'Cold-Lead' });
       toast.success('Cold Lead created successfully!');
-      memoizedFetchLeads(); // Re-fetch cold leads to include the new one
+      memoizedFetchLeads();
       return createdLead;
     } catch (error) {
       console.error('Failed to create cold lead:', error);
@@ -160,45 +127,32 @@ export default function ColdLeadsPage() { // Assuming this file is at app/cold-l
     }
   };
 
-  // This function is still needed for modals that might update a lead, but not for direct detail view
-  const handleUpdateLead = async (leadId: string, updatedLeadData: Partial<Lead>) => {
-    try {
-      await updateLead(leadId, updatedLeadData);
-      toast.success('Cold Lead updated successfully!');
-      memoizedFetchLeads(); // Re-fetch cold leads after updating to ensure data consistency
-      // If a modal is open with selectedLeadForModal, update it
-      if (selectedLeadForModal && selectedLeadForModal.id === leadId) {
-        setSelectedLeadForModal(prev => prev ? { ...prev, ...updatedLeadData } : null);
-      }
-    } catch (error) {
-      console.error('Failed to update cold lead:', error);
-      toast.error('Failed to update cold lead.');
-    }
-  };
+  const handleLeadUpdateFromModal = useCallback((updatedLead: Lead) => {
+    memoizedFetchLeads();
+  }, [memoizedFetchLeads]);
 
 
-  // --- IMPORTANT CHANGE HERE ---
   const handleViewDetails = (lead: Lead) => {
     if (permissionService.canAccessLead(user, lead.assignedAgent)) {
-      // Redirect to the dedicated lead profile page
       router.push(`/leads/${lead.id}`);
     } else {
       toast.error('You do not have permission to view this lead.');
     }
   };
 
-  // handleEditLead will also redirect to the detail page, as edits happen there
   const handleEditLead = (lead: Lead) => {
     if (permissionService.canEditLead(user, lead.assignedAgent, lead.createdBy)) {
-      router.push(`/leads/${lead.id}`); // Navigate to the detail page for editing
+      router.push(`/leads/${lead.id}`);
     } else {
       toast.error('You do not have permission to edit this lead.');
     }
   };
-  // --- END IMPORTANT CHANGE ---
 
   const handleLeadAction = (lead: Lead, action: string) => {
-    setSelectedLeadForModal(lead); // Set selected lead for modals
+    // --- FIX IS HERE ---
+    // Pass the lead.id (string) to the state, not the whole lead object
+    setSelectedLeadIdForModal(lead.id);
+    // --- END FIX ---
     switch (action) {
       case 'notes':
         setIsNotesModalOpen(true);
@@ -207,7 +161,6 @@ export default function ColdLeadsPage() { // Assuming this file is at app/cold-l
         setIsTasksModalOpen(true);
         break;
       case 'edit':
-        // The 'edit' action for the dropdown should still open the detail page for editing
         handleEditLead(lead);
         break;
     }
@@ -215,37 +168,14 @@ export default function ColdLeadsPage() { // Assuming this file is at app/cold-l
 
   const handleImportComplete = (importedCount: number) => {
     toast.success(`${importedCount} cold leads imported successfully!`);
-    memoizedFetchLeads(); // Refresh leads after import
-    setIsImportModalOpen(false); // Close the modal after import
+    memoizedFetchLeads();
+    setIsImportModalOpen(false);
   };
 
-  const handleAddNote = async (noteContent: string) => { // Changed type to string for clarity
-    if (!selectedLeadForModal) return;
-
-    // Construct the new activity object with a unique ID
-    const newActivity = {
-      id: `${selectedLeadForModal.id}-note-${Date.now()}`,
-      type: 'Note' as Lead['activities'][0]['type'], // Cast to the correct Activity type
-      description: noteContent,
-      date: new Date(),
-      agent: user?.name || 'Unknown User', // Use current user's name
-    };
-
-    const updatedActivities = [newActivity, ...(selectedLeadForModal.activities || [])];
-
-    try {
-      await handleUpdateLead(selectedLeadForModal.id, { activities: updatedActivities });
-      // The `handleUpdateLead` already calls `memoizedFetchLeads()`, which should sync data.
-      // If the modal needs to reflect the new note immediately without full re-fetch,
-      // you could update `selectedLeadForModal` here:
-      setSelectedLeadForModal(prev => prev ? { ...prev, activities: updatedActivities } : null);
-      toast.success("Note added successfully to cold lead!");
-    } catch (error) {
-      console.error("Failed to add note:", error);
-      toast.error("Failed to add note.");
-    }
-  };
-
+  const handleAddNoteToLead = useCallback(async (noteContent: string) => {
+    // This function can remain as a placeholder or be removed, as LeadNotesModal now handles its own save.
+    // The key is that `onLeadUpdate` from the modal will trigger the parent's refresh.
+  }, []);
 
   if (loading) {
     return (
@@ -278,10 +208,6 @@ export default function ColdLeadsPage() { // Assuming this file is at app/cold-l
       </ProtectedRoute>
     );
   }
-
-  // Removed the conditional rendering of LeadProfile component
-  // as it is now handled by the separate /leads/[id] route.
-  // The logic for displaying selectedLead and hiding the list view is no longer needed here.
 
   return (
     <ProtectedRoute>
@@ -373,8 +299,8 @@ export default function ColdLeadsPage() { // Assuming this file is at app/cold-l
                 <div key={lead.id} className="relative group">
                   <LeadCard
                     lead={lead}
-                    onViewDetails={handleViewDetails} // This now redirects
-                    onEditLead={handleEditLead} // This now redirects
+                    onViewDetails={handleViewDetails}
+                    onEditLead={handleEditLead}
                   />
 
                   {/* Quick Actions Overlay */}
@@ -464,27 +390,26 @@ export default function ColdLeadsPage() { // Assuming this file is at app/cold-l
               <LeadExportModal
                 open={isExportModalOpen}
                 onOpenChange={setIsExportModalOpen}
-                leads={filteredAndSortedLeads} // Export only currently filtered/sorted cold leads
+                leads={filteredAndSortedLeads}
               />
             </>
           )}
 
-          {selectedLeadForModal && ( // Use selectedLeadForModal for modals
+          {/* Conditional rendering for notes and tasks modals */}
+          {selectedLeadIdForModal && (
             <>
               <LeadNotesModal
                 open={isNotesModalOpen}
                 onOpenChange={setIsNotesModalOpen}
-                lead={selectedLeadForModal}
-                onAddNote={handleAddNote}
+                leadId={selectedLeadIdForModal} // Now correctly passing the string ID
+                onLeadUpdate={handleLeadUpdateFromModal}
               />
-
+              
               {/* <LeadTasksModal
                 open={isTasksModalOpen}
                 onOpenChange={setIsTasksModalOpen}
-                lead={selectedLeadForModal}
-                // Assuming LeadTasksModal might need to update the lead
-                // pass handleUpdateLead as a prop if it needs to save tasks to the lead object
-                onUpdateLead={(leadId, updatedData) => handleUpdateLead(leadId, updatedData)}
+                lead={leads.find(l => l.id === selectedLeadIdForModal) || null} // Find the lead by ID if LeadTasksModal still expects the full object
+                onUpdateLead={handleLeadUpdateFromModal}
               /> */}
             </>
           )}
