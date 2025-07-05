@@ -241,6 +241,18 @@ export function LeadImportModal({ open, onOpenChange, onImportComplete }: LeadIm
                 <DialogDescription>
                   Download a sample CSV template to help you format your data.
                 </DialogDescription>
+                <DialogDescription>
+                  <b>Please note : </b>
+                  <br></br>
+                  <br></br>
+                  Duplicate Number leads, 
+                  <br></br>
+                  <br></br>
+                  Number bigger or smaller that 10 digits will not be imported,
+                  <br></br>
+                  <br></br>
+                  The system will automatically add 91 before the number
+                </DialogDescription>
               </CardHeader>
               <CardContent className="flex justify-center items-center">
                 <Button variant="outline" onClick={downloadTemplate}>
@@ -268,13 +280,16 @@ export function LeadImportModal({ open, onOpenChange, onImportComplete }: LeadIm
                     <AlertCircle className="h-3 w-3 text-red-500" />
                     <span>phone (required)</span>
                   </div>
+                  <div className="flex items-center space-x-2">
+                    <AlertCircle className="h-3 w-3 text-red-500" />
+                    <span>lead type (required)</span>
+                  </div>
                   <div className="text-gray-600">property type (optional)</div>
                   <div className="text-gray-600">budget range (optional)</div>
                   <div className="text-gray-600">preferred locations (optional)</div>
                   <div className="text-gray-600">source (optional)</div>
                   <div className="text-gray-600">status (optional)</div>
                   <div className="text-gray-600">lead score (optional)</div>
-                  <div className="text-gray-600">lead type (optional)</div>
                   <div className="text-gray-600">notes (optional)</div>
                 </div>
               </CardContent>
