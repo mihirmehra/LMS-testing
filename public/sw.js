@@ -16,8 +16,8 @@ self.addEventListener('push', (event) => {
   let notificationData = {
     title: 'RealEstate CRM',
     body: 'You have a new notification',
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
+    icon: '/favicon.png',
+    badge: '/favicon.png',
     tag: 'realestate-crm',
     data: {},
   };
@@ -49,12 +49,12 @@ self.addEventListener('push', (event) => {
       {
         action: 'view',
         title: 'View',
-        icon: '/favicon.ico',
+        icon: '/favicon.png',
       },
       {
         action: 'dismiss',
         title: 'Dismiss',
-        icon: '/favicon.ico',
+        icon: '/favicon.png',
       },
     ],
     requireInteraction: true,

@@ -161,8 +161,8 @@ export function Sidebar({ className }: SidebarProps) {
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
         {!collapsed && (
           <div className="flex items-center space-x-2">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Building2 className="h-6 w-6 text-white" />
+            <div className="rounded-lg">
+              <img className='w-[56px]' src="https://countryroof.com/mystyle/images/fav.png" alt="" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-gray-900">Countryroof</h1>
