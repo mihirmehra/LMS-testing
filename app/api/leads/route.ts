@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { LeadsAPI } from '@/lib/api/leads';
+import { LeadsAPI } from '@/lib/api/leads'; // Assuming this path is correct
 
-export async function GET() {
+export async function GET(request: NextRequest) { // <-- Accept the request object
   try {
-    const leads = await LeadsAPI.getLeads();
+    const { searchParams } = new URL(request.url);
+    const leadType = searchParams.get('leadType'); // <-- Extract leadType from query params
+
+    // Prepare filter options only if leadType is present and valid
+    const filterOptions: { leadType?: 'Lead' | 'Cold-Lead' } = {};
+    if (leadType === 'Lead' || leadType === 'Cold-Lead') {
+      filterOptions.leadType = leadType;
+    }
+
+    // Pass the filterOptions to LeadsAPI.getLeads()
+    const leads = await LeadsAPI.getLeads(filterOptions);
     return NextResponse.json(leads);
   } catch (error) {
     console.error('API Error:', error);
