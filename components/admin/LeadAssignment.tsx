@@ -144,19 +144,22 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
 
   const getStatusColor = (status: string) => {
     const colors = {
-      'New': 'bg-blue-100 text-blue-800',
-      'Contacted': 'bg-purple-100 text-purple-800',
-      'Qualified': 'bg-green-100 text-green-800',
-      'Nurturing': 'bg-amber-100 text-amber-800',
-      'RNR': 'bg-amber-100 text-amber-800',
-      'Busy': 'bg-amber-100 text-amber-800',
-      'Disconnected': 'bg-amber-100 text-amber-800',
-      'Site Visit Scheduled': 'bg-indigo-100 text-indigo-800',
-      'Site Visited': 'bg-cyan-100 text-cyan-800',
-      'Negotiation': 'bg-orange-100 text-orange-800',
-      'Converted': 'bg-emerald-100 text-emerald-800',
-      'Lost': 'bg-red-100 text-red-800',
-      'Hold': 'bg-gray-100 text-gray-800',
+      'New': 'bg-blue-100 text-blue-800 border-blue-200',
+      'Contacted': 'bg-purple-100 text-purple-800 border-purple-200',
+      'Qualified': 'bg-green-100 text-green-800 border-green-200',
+      'Nurturing': 'bg-amber-100 text-amber-800 border-amber-200',
+      'RNR': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'Busy': 'bg-rose-100 text-rose-800 border-rose-200',
+      'Disconnected': 'bg-slate-100 text-slate-800 border-slate-200',
+      'Not Interested': 'bg-red-100 text-red-800 border-red-200',
+      'Not Interested (project)': 'bg-red-200 text-red-900 border-red-300',
+      'Low Potential': 'bg-gray-200 text-gray-800 border-gray-300',
+      'Site Visit Scheduled': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      'Site Visited': 'bg-cyan-100 text-cyan-800 border-cyan-200',
+      'Negotiation': 'bg-orange-100 text-orange-800 border-orange-200',
+      'Converted': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'Lost': 'bg-zinc-100 text-zinc-800 border-zinc-200',
+      'Hold': 'bg-neutral-100 text-neutral-800 border-neutral-200',
     };
     return colors[status as keyof typeof colors] || colors['New'];
   };

@@ -23,7 +23,7 @@ interface LeadListItemProps {
 // Define the exact status options available for a lead
 // Use 'as const' to make it a tuple of literal strings, and then assert its type
 const LEAD_STATUS_OPTIONS = [
-  'New', 'Contacted', 'Qualified', 'Nurturing', 'RNR', 'Busy', 'Disconnected',
+  'New', 'Contacted', 'Qualified', 'Nurturing', 'RNR', 'Busy', 'Disconnected', 'Not Interested', 'Not Interested (project)', 'Low Potential',
   'Site Visit Scheduled', 'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'
 ] as const satisfies readonly Lead['status'][]; // Using 'satisfies' for type safety without widening
 
@@ -49,15 +49,18 @@ export function LeadListItem({ lead, onViewDetails, onEditLead, onStatusChange }
       'Contacted': 'bg-purple-100 text-purple-800 border-purple-200',
       'Qualified': 'bg-green-100 text-green-800 border-green-200',
       'Nurturing': 'bg-amber-100 text-amber-800 border-amber-200',
-      'RNR': 'bg-amber-100 text-amber-800',
-      'Busy': 'bg-amber-100 text-amber-800',
-      'Disconnected': 'bg-amber-100 text-amber-800',
+      'RNR': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'Busy': 'bg-rose-100 text-rose-800 border-rose-200',
+      'Disconnected': 'bg-slate-100 text-slate-800 border-slate-200',
+      'Not Interested': 'bg-red-100 text-red-800 border-red-200',
+      'Not Interested (project)': 'bg-red-200 text-red-900 border-red-300',
+      'Low Potential': 'bg-gray-200 text-gray-800 border-gray-300',
       'Site Visit Scheduled': 'bg-indigo-100 text-indigo-800 border-indigo-200',
       'Site Visited': 'bg-cyan-100 text-cyan-800 border-cyan-200',
       'Negotiation': 'bg-orange-100 text-orange-800 border-orange-200',
       'Converted': 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      'Lost': 'bg-red-100 text-red-800 border-red-200',
-      'Hold': 'bg-gray-100 text-gray-800 border-gray-200',
+      'Lost': 'bg-zinc-100 text-zinc-800 border-zinc-200',
+      'Hold': 'bg-neutral-100 text-neutral-800 border-neutral-200',
     };
     // Cast 'status' to Lead['status'] here to match the keys of 'colors'
     return colors[status as Lead['status']] || colors['New'];

@@ -109,10 +109,6 @@ export async function POST(request: Request) {
         leadErrors.push(`Row ${originalRow}: 'name' is missing or empty.`);
         leadIsValid = false;
       }
-      if (!lead.email || String(lead.email).trim() === '') {
-        leadErrors.push(`Row ${originalRow}: 'email' is missing or empty.`);
-        leadIsValid = false;
-      }
       if (!lead.phone || String(lead.phone).trim() === '') {
         leadErrors.push(`Row ${originalRow}: 'phone' is missing or empty.`);
         leadIsValid = false;

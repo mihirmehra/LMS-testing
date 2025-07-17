@@ -473,6 +473,7 @@ export default function HomePage() {
                 open={isAddModalOpen}
                 onOpenChange={setIsAddModalOpen}
                 onAddLead={handleAddLead}
+                existingLeads={userFilteredLeads}
               />
 
               <LeadImportModal

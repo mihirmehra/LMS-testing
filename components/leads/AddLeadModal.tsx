@@ -9,27 +9,28 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Lead } from '@/types/lead'; // Ensure Lead type is correctly imported
+import { Lead } from '@/types/lead';
 import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
 import { budgetRanges, locations } from '@/lib/mockData';
-import { NewLeadData } from '@/hooks/useLeads'; // Import the NewLeadData type from useLeads
+import { NewLeadData } from '@/hooks/useLeads';
+import { toast } from 'sonner'; // Still good for general feedback, but we'll add in-modal too
 
 interface AddLeadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // Updated: onAddLead now correctly expects an async function returning Promise<Lead>
   onAddLead: (lead: NewLeadData) => Promise<Lead>;
+  existingLeads: Lead[];
 }
 
-export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProps) {
+export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: AddLeadModalProps) {
   const { user } = useAuth();
   const permissionService = PermissionService.getInstance();
   const [agents, setAgents] = useState<any[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null); // NEW: State for in-modal error
 
-  // Initialize formData with ALL required Lead properties, even if empty/default
   const initialFormData = {
     name: '',
     primaryPhone: '',
@@ -46,7 +47,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
     leadScore: 'Medium' as Lead['leadScore'],
     attachments: [] as string[],
     activities: [],
-    leadType: 'Lead' as Lead['leadType'], // ADDED: Default to 'Lead'
+    leadType: 'Lead' as Lead['leadType'],
   };
 
   const [formData, setFormData] = useState<NewLeadData>(initialFormData);
@@ -57,14 +58,16 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
       setFormData({
         ...initialFormData,
         createdBy: user?.id || 'system',
+        assignedAgent: (user?.role === 'agent' && !permissionService.canAssignLeads(user)) ? user.id : '',
       });
+      setModalError(null); // Clear error when modal opens
     }
-  }, [open, user?.id]);
+  }, [open, user?.id, user?.role, permissionService]);
 
   const fetchAgents = async () => {
     try {
       setLoadingAgents(true);
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null; // Safely access localStorage
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
       const response = await fetch('/api/users', {
         method: 'GET',
         headers: {
@@ -107,14 +110,31 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
   };
 
   const handlePhoneChange = (field: 'primaryPhone' | 'secondaryPhone', value: string) => {
-    const formattedPhone = formatPhoneNumber(value);
-    setFormData(prev => ({ ...prev, [field]: formattedPhone }));
+    // Clear any phone-related error when the user starts typing again
+    setModalError(null);
+    setFormData(prev => ({ ...prev, [field]: formatPhoneNumber(value) }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null); // Clear previous errors on new submission attempt
+
     if (!formData.name || !formData.primaryPhone || !formData.primaryEmail) {
-      alert('Please fill in all required fields: Full Name, Primary Phone, Primary Email.');
+      const msg = 'Please fill in all required fields: Full Name, Primary Phone, Primary Email.';
+      setModalError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    // Duplicate primary phone number check
+    const existingLeadWithPhone = existingLeads.find(
+      (lead) => lead.primaryPhone === formData.primaryPhone
+    );
+
+    if (existingLeadWithPhone) {
+      const msg = `A lead with the primary phone number "${formData.primaryPhone}" is already registered under "${existingLeadWithPhone.name}".`;
+      setModalError(msg);
+      toast.error(msg);
       return;
     }
 
@@ -136,13 +156,11 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
 
       await onAddLead(leadToSubmit);
       onOpenChange(false);
-      // Removed window.location.reload(); from here.
-      // It's better to let the parent component manage re-fetching data
-      // after a successful add, typically by calling fetchLeads in the parent.
-      // This allows for more granular UI updates without a full page refresh.
     } catch (error) {
       console.error('Failed to add lead:', error);
-      alert('Failed to add lead. Please try again.');
+      const msg = `Failed to add lead: ${(error as Error).message || 'Unknown error'}. Please try again.`;
+      setModalError(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -174,6 +192,14 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
           </DialogDescription>
         </DialogHeader>
 
+        {/* NEW: Error message display */}
+        {modalError && (
+          <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-md mb-4" role="alert">
+            <p className="font-semibold">Error:</p>
+            <p>{modalError}</p>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Basic Information */}
@@ -197,6 +223,8 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
                   onChange={(e) => handlePhoneChange('primaryPhone', e.target.value)}
                   placeholder="+91XXXXXXXXXX"
                   required
+                  // Add a red border if there's a phone-related error
+                  className={modalError && modalError.includes('phone number already exists') ? 'border-red-500' : ''}
                 />
                 <p className="text-xs text-gray-500 mt-1">Format: +91XXXXXXXXXX</p>
               </div>
@@ -291,13 +319,13 @@ export function AddLeadModal({ open, onOpenChange, onAddLead }: AddLeadModalProp
                 </Select>
               </div>
 
-              {/* NEW: Lead Type Selection */}
+              {/* Lead Type Selection */}
               <div>
                 <Label htmlFor="leadType">Lead Type *</Label>
                 <Select
                   value={formData.leadType}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, leadType: value as Lead['leadType'] }))}
-                  required // Make this field required
+                  required
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select lead type" />

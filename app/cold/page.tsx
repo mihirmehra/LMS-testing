@@ -439,6 +439,7 @@ export default function ColdLeadsPage() {
                 open={isAddModalOpen}
                 onOpenChange={setIsAddModalOpen}
                 onAddLead={handleAddLead}
+                existingLeads={userFilteredLeads}
               />
 
               <LeadImportModal

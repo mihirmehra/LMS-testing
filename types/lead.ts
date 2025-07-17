@@ -9,7 +9,7 @@ export interface Lead {
   budgetRange: string;
   preferredLocations: string[];
   source: 'Website' | 'Referral' | 'Social Media' | 'Walk-in' | 'Advertisement' | 'Other';
-  status: 'New' | 'Contacted' | 'Qualified' | 'Nurturing' | 'RNR' | 'Busy' | 'Disconnected' | 'Site Visit Scheduled' | 'Site Visited' | 'Negotiation' | 'Converted' | 'Lost' | 'Hold';
+  status: 'New' | 'Contacted' | 'Qualified' | 'Nurturing' | 'RNR' | 'Busy' | 'Disconnected' | 'Not Interested' | 'Not Interested (project)' | 'Low Potential' | 'Site Visit Scheduled' | 'Site Visited' | 'Negotiation' | 'Converted' | 'Lost' | 'Hold' ; 
   assignedAgent?: string;
   notes: string;
   createdAt: Date;

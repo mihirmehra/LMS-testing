@@ -274,16 +274,13 @@ export function LeadImportModal({ open, onOpenChange, onImportComplete }: LeadIm
                   </div>
                   <div className="flex items-center space-x-2">
                     <AlertCircle className="h-3 w-3 text-red-500" />
-                    <span>email (required)</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <AlertCircle className="h-3 w-3 text-red-500" />
                     <span>phone (required)</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <AlertCircle className="h-3 w-3 text-red-500" />
                     <span>lead type (required)</span>
                   </div>
+                  <div className="text-gray-600">email (optional)</div>
                   <div className="text-gray-600">property type (optional)</div>
                   <div className="text-gray-600">budget range (optional)</div>
                   <div className="text-gray-600">preferred locations (optional)</div>
