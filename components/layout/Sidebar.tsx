@@ -79,7 +79,7 @@ export function Sidebar({ className }: SidebarProps) {
       href: '/calendar',
       icon: Calendar,
       current: pathname === '/calendar',
-      badge: '3',
+      badge: null,
       visible: permissionService.hasPermission(user, 'calendar', 'read'),
     },
     {

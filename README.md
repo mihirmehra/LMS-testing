@@ -164,3 +164,223 @@ This project is licensed under the MIT License.
 ## Support
 
 For support and questions, please open an issue in the GitHub repository.
+```
+project
+├─ .eslintrc.json
+├─ app
+│  ├─ admin
+│  │  ├─ leads
+│  │  │  └─ page.tsx
+│  │  └─ users
+│  │     └─ page.tsx
+│  ├─ analytics
+│  │  └─ page.tsx
+│  ├─ api
+│  │  ├─ agents
+│  │  │  └─ route.ts
+│  │  ├─ auth
+│  │  │  ├─ change-password
+│  │  │  │  └─ route.ts
+│  │  │  ├─ google
+│  │  │  │  ├─ connect
+│  │  │  │  │  └─ route.ts
+│  │  │  │  └─ disconnect
+│  │  │  │     └─ route.ts
+│  │  │  ├─ login
+│  │  │  │  └─ route.ts
+│  │  │  ├─ logout
+│  │  │  │  └─ route.ts
+│  │  │  ├─ me
+│  │  │  │  └─ route.ts
+│  │  │  ├─ profile
+│  │  │  │  └─ route.ts
+│  │  │  └─ register
+│  │  │     └─ route.ts
+│  │  ├─ communications
+│  │  │  ├─ activities
+│  │  │  │  └─ route.ts
+│  │  │  ├─ calendar
+│  │  │  │  ├─ route.ts
+│  │  │  │  └─ [id]
+│  │  │  │     └─ route.ts
+│  │  │  └─ whatsapp
+│  │  │     └─ route.ts
+│  │  ├─ leads
+│  │  │  ├─ import
+│  │  │  │  └─ route.ts
+│  │  │  ├─ route.ts
+│  │  │  └─ [id]
+│  │  │     ├─ activities
+│  │  │     │  └─ route.ts
+│  │  │     └─ route.ts
+│  │  ├─ notifications
+│  │  │  ├─ devices
+│  │  │  │  ├─ route.ts
+│  │  │  │  └─ [id]
+│  │  │  │     └─ route.ts
+│  │  │  ├─ mark-all-read
+│  │  │  │  └─ route.ts
+│  │  │  ├─ push
+│  │  │  │  └─ route.ts
+│  │  │  ├─ route.ts
+│  │  │  └─ [id]
+│  │  │     ├─ read
+│  │  │     │  └─ route.ts
+│  │  │     └─ route.ts
+│  │  └─ users
+│  │     ├─ route.ts
+│  │     └─ [id]
+│  │        └─ route.ts
+│  ├─ calendar
+│  │  └─ page.tsx
+│  ├─ cold
+│  │  └─ page.tsx
+│  ├─ communications
+│  │  └─ page.tsx
+│  ├─ globals.css
+│  ├─ layout.tsx
+│  ├─ leads
+│  │  ├─ page.tsx
+│  │  └─ [id]
+│  │     └─ page.tsx
+│  ├─ login
+│  │  └─ page.tsx
+│  ├─ notifications
+│  │  └─ page.tsx
+│  ├─ page.tsx
+│  ├─ profile
+│  │  └─ page.tsx
+│  ├─ register
+│  │  └─ page.tsx
+│  ├─ reports
+│  │  └─ page.tsx
+│  └─ unauthorized
+│     └─ page.tsx
+├─ components
+│  ├─ admin
+│  │  └─ LeadAssignment.tsx
+│  ├─ analytics
+│  │  ├─ ActivityReportChart.tsx
+│  │  ├─ AgentPerformanceChart.tsx
+│  │  ├─ AnalyticsDashboard.tsx
+│  │  ├─ ConversionFunnelChart.tsx
+│  │  └─ LeadSourceChart.tsx
+│  ├─ auth
+│  │  ├─ LoginForm.tsx
+│  │  ├─ ProtectedRoute.tsx
+│  │  ├─ RegisterForm.tsx
+│  │  └─ UserProfile.tsx
+│  ├─ communication
+│  │  ├─ CalendarEventModal.tsx
+│  │  ├─ CommunicationPanel.tsx
+│  │  └─ WhatsAppModal.tsx
+│  ├─ dashboard
+│  │  └─ DashboardMetrics.tsx
+│  ├─ layout
+│  │  ├─ ClientLayout.tsx
+│  │  ├─ Layout.tsx
+│  │  └─ Sidebar.tsx
+│  ├─ leads
+│  │  ├─ AddLeadModal.tsx
+│  │  ├─ LeadCard.tsx
+│  │  ├─ LeadExportModal.tsx
+│  │  ├─ LeadFilters.tsx
+│  │  ├─ LeadImportModal.tsx
+│  │  ├─ LeadNotesModal.tsx
+│  │  ├─ LeadProfile.tsx
+│  │  └─ LeadTasksModal.tsx
+│  ├─ notifications
+│  │  ├─ NotificationBell.tsx
+│  │  ├─ NotificationCenter.tsx
+│  │  ├─ NotificationToast.tsx
+│  │  └─ PushNotificationSettings.tsx
+│  └─ ui
+│     ├─ accordion.tsx
+│     ├─ alert-dialog.tsx
+│     ├─ alert.tsx
+│     ├─ aspect-ratio.tsx
+│     ├─ avatar.tsx
+│     ├─ badge.tsx
+│     ├─ breadcrumb.tsx
+│     ├─ button.tsx
+│     ├─ calendar.tsx
+│     ├─ card.tsx
+│     ├─ carousel.tsx
+│     ├─ chart.tsx
+│     ├─ checkbox.tsx
+│     ├─ collapsible.tsx
+│     ├─ command.tsx
+│     ├─ context-menu.tsx
+│     ├─ dialog.tsx
+│     ├─ drawer.tsx
+│     ├─ dropdown-menu.tsx
+│     ├─ form.tsx
+│     ├─ hover-card.tsx
+│     ├─ input-otp.tsx
+│     ├─ input.tsx
+│     ├─ label.tsx
+│     ├─ menubar.tsx
+│     ├─ navigation-menu.tsx
+│     ├─ pagination.tsx
+│     ├─ popover.tsx
+│     ├─ progress.tsx
+│     ├─ radio-group.tsx
+│     ├─ resizable.tsx
+│     ├─ scroll-area.tsx
+│     ├─ select.tsx
+│     ├─ separator.tsx
+│     ├─ sheet.tsx
+│     ├─ skeleton.tsx
+│     ├─ slider.tsx
+│     ├─ sonner.tsx
+│     ├─ switch.tsx
+│     ├─ table.tsx
+│     ├─ tabs.tsx
+│     ├─ textarea.tsx
+│     ├─ toast.tsx
+│     ├─ toaster.tsx
+│     ├─ toggle-group.tsx
+│     ├─ toggle.tsx
+│     └─ tooltip.tsx
+├─ components.json
+├─ hooks
+│  ├─ use-toast.ts
+│  ├─ useAgents.ts
+│  ├─ useAuth.tsx
+│  ├─ useLeads.ts
+│  └─ useNotifications.ts
+├─ lib
+│  ├─ analyticsService.ts
+│  ├─ api
+│  │  ├─ agents.ts
+│  │  ├─ communications.ts
+│  │  ├─ leads.ts
+│  │  ├─ notifications.ts
+│  │  └─ users.ts
+│  ├─ auth.ts
+│  ├─ googleCalendar.ts
+│  ├─ mockData.ts
+│  ├─ mongodb.ts
+│  ├─ permissions.ts
+│  ├─ pushNotifications.ts
+│  ├─ utils.ts
+│  └─ whatsappService.ts
+├─ next.config.js
+├─ package-lock.json
+├─ package.json
+├─ postcss.config.js
+├─ public
+│  ├─ favicon.png
+│  └─ sw.js
+├─ README copy.md
+├─ README.md
+├─ tailwind.config.ts
+├─ tsconfig.json
+└─ types
+   ├─ analytics.ts
+   ├─ auth.ts
+   ├─ communication.ts
+   ├─ lead.ts
+   └─ notification.ts
+
+```

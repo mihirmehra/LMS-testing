@@ -22,7 +22,7 @@ interface CsvLeadData {
 // Define valid options for enums to ensure type safety
 const VALID_PROPERTY_TYPES = ['Residential', 'Commercial', 'Land'] as const;
 const VALID_SOURCES = ['Website', 'Referral', 'Social Media', 'Walk-in', 'Advertisement', 'Other'] as const;
-const VALID_STATUSES = ['New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled', 'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'] as const;
+const VALID_STATUSES = ['New', 'Contacted', 'Qualified', 'Nurturing', 'RNR', 'Busy', 'Disconnected', 'Site Visit Scheduled', 'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'] as const;
 const VALID_LEAD_SCORES = ['High', 'Medium', 'Low'] as const;
 const VALID_LEAD_TYPES = ['Lead', 'Cold-Lead'] as const;
 

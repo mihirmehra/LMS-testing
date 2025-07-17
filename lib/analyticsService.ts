@@ -176,7 +176,7 @@ export class AnalyticsService {
     const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
     const filteredLeads = this.applyFilters(userFilteredLeads, filters);
     const statusOrder = [
-      'New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled', 
+      'New', 'Contacted', 'Qualified', 'Nurturing', 'RNR', 'Busy', 'Disconnected', 'Site Visit Scheduled',  
       'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'
     ];
 
