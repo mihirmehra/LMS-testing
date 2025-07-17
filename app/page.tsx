@@ -1,4 +1,3 @@
-// app/leads/home/page.tsx
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -8,42 +7,44 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DashboardMetrics } from '@/components/dashboard/DashboardMetrics';
 import { LeadCard } from '@/components/leads/LeadCard';
+import { LeadListItem } from '@/components/leads/LeadListItem';
 import { LeadFilters } from '@/components/leads/LeadFilters';
 import { AddLeadModal } from '@/components/leads/AddLeadModal';
 import { LeadImportModal } from '@/components/leads/LeadImportModal';
 import { LeadExportModal } from '@/components/leads/LeadExportModal';
-import { LeadNotesModal } from '@/components/leads/LeadNotesModal'; // Updated import if path changed, but seems correct
+import { LeadNotesModal } from '@/components/leads/LeadNotesModal';
 import { LeadTasksModal } from '@/components/leads/LeadTasksModal';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { Lead, LeadFilters as Filters } from '@/types/lead';
+import { Lead, LeadFilters as Filters } from '@/types/lead'; // No need to import LeadStatus separately here
 import { NewLeadData, useLeads } from '@/hooks/useLeads';
-import { useAgents } from '@/hooks/useAgents'; // This seems unused, consider removing if truly not needed
+import { useAgents } from '@/hooks/useAgents';
 import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
-import { Plus, Building2, Filter, Loader2, Database, Upload, Download, FileText, CheckSquare, MoreHorizontal } from 'lucide-react';
+import { Plus, Building2, Filter, Loader2, Database, Upload, Download, FileText, CheckSquare, MoreHorizontal, LayoutGrid, List } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { toast } from 'sonner'; // For toasts
+import { toast } from 'sonner';
 
 type SortOption = 'created-desc' | 'created-asc' | 'name-asc' | 'name-desc' | 'score-high' | 'score-low';
+type ViewMode = 'card' | 'list';
 
-export default function HomePage() { // Renamed from Home to HomePage for clarity, though 'Home' is fine
+export default function HomePage() {
   const { user } = useAuth();
   const router = useRouter();
-  const { leads, loading, error, createLead, fetchLeads } = useLeads();
-  const { agents } = useAgents(); // Still present, if not used, can be removed
+  const { leads, loading, error, createLead, fetchLeads, updateLead } = useLeads();
+  const { agents } = useAgents();
   const [filters, setFilters] = useState<Filters>({});
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null); // Track selected lead by ID
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('created-desc');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   const permissionService = PermissionService.getInstance();
 
   useEffect(() => {
-    // Fetch 'Lead' type leads when the component mounts
     fetchLeads('Lead');
   }, [fetchLeads]);
 
@@ -71,7 +72,8 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
         if (!searchableText.includes(searchTerm)) return false;
       }
       if (filters.status && filters.status.length > 0) {
-        if (!filters.status.includes(lead.status)) return false;
+        // Ensure type compatibility here by casting filter status to Lead['status']
+        if (!filters.status.includes(lead.status as Lead['status'])) return false;
       }
       if (filters.assignedAgent && lead.assignedAgent !== filters.assignedAgent) {
         return false;
@@ -106,9 +108,9 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
       const scoreB = b.leadScore as LeadScore;
       switch (sortBy) {
         case 'created-desc':
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return b.createdAt.getTime() - a.createdAt.getTime(); // Direct use of Date object
         case 'created-asc':
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          return a.createdAt.getTime() - b.createdAt.getTime(); // Direct use of Date object
         case 'name-asc':
           return a.name.localeCompare(b.name);
         case 'name-desc':
@@ -137,7 +139,7 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
       const createdLead = await createLead(newLeadData);
       console.log('CLIENT: Lead created successfully:', createdLead);
       toast.success('Lead created successfully!');
-      fetchLeads('Lead'); // Re-fetch leads to update the list
+      fetchLeads('Lead');
       return createdLead;
     } catch (error: any) {
       console.error('CLIENT: Failed to create lead:', error);
@@ -146,19 +148,37 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
     }
   };
 
-  // Callback for when a lead is updated via LeadNotesModal or LeadTasksModal
-  // This will trigger a re-fetch of the leads list to ensure consistency
   const handleLeadUpdateFromModal = useCallback((updatedLead: Lead) => {
     console.log('Lead updated from modal, refreshing list:', updatedLead);
     fetchLeads('Lead');
-    // Optionally, you might close the modal here if you want:
-    // setIsNotesModalOpen(false);
-    // setIsTasksModalOpen(false);
   }, [fetchLeads]);
+
+  // NEW: Handle status update from LeadListItem
+  const handleStatusUpdate = useCallback(async (leadId: string, newStatus: Lead['status']) => { // <--- HERE
+    try {
+      const leadToUpdate = leads.find(l => l.id === leadId);
+      if (!leadToUpdate) {
+        throw new Error("Lead not found for status update.");
+      }
+
+      if (!permissionService.canEditLead(user, leadToUpdate.assignedAgent, leadToUpdate.createdBy)) {
+        toast.error("You don't have permission to change the status of this lead.");
+        return;
+      }
+
+      // No need to cast newStatus here, as it's already correctly typed
+      await updateLead(leadId, { status: newStatus });
+      toast.success(`Lead status updated for ${leadToUpdate.name}`);
+    } catch (error: any) {
+      console.error('Failed to update lead status from home page:', error);
+      toast.error(`Failed to update status: ${error.message || 'Unknown error'}`);
+      fetchLeads('Lead');
+    }
+  }, [leads, updateLead, user]);
 
   const handleViewDetails = useCallback((lead: Lead) => {
     if (permissionService.canAccessLead(user, lead.assignedAgent)) {
-      router.push(`/leads/${lead.id}`); // Navigate to the dedicated lead profile page
+      router.push(`/leads/${lead.id}`);
     } else {
       toast.error("You don't have permission to view details for this lead.");
     }
@@ -166,8 +186,8 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
 
   const handleEditLead = useCallback((lead: Lead) => {
     if (permissionService.hasPermission(user, 'leads', 'update') &&
-        permissionService.canAccessLead(user, lead.assignedAgent)) {
-      router.push(`/leads/${lead.id}`); // Navigate to the dedicated lead profile page
+      permissionService.canAccessLead(user, lead.assignedAgent)) {
+      router.push(`/leads/${lead.id}`);
     } else {
       toast.error("You don't have permission to edit this lead.");
     }
@@ -188,7 +208,7 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
         setIsTasksModalOpen(true);
         break;
       case 'edit':
-        handleEditLead(lead); // This will now navigate
+        handleEditLead(lead);
         break;
       case 'view':
         handleViewDetails(lead);
@@ -202,11 +222,10 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
     } else {
       toast.info('No new leads were imported.');
     }
-    fetchLeads('Lead'); // Re-fetch leads to show imported ones
+    fetchLeads('Lead');
     setIsImportModalOpen(false);
   };
 
-  // Loading and Error states
   if (loading) {
     return (
       <ProtectedRoute>
@@ -262,6 +281,26 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
               </div>
             </div>
             <div className="flex items-center space-x-3">
+              {/* View Mode Toggle */}
+              <div className="flex rounded-md shadow-sm" role="group">
+                <Button
+                  variant={viewMode === 'card' ? 'default' : 'outline'}
+                  onClick={() => setViewMode('card')}
+                  size="sm"
+                  className={`${viewMode === 'card' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} rounded-r-none`}
+                >
+                  <LayoutGrid className="h-4 w-4 mr-1" /> Card View
+                </Button>
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'outline'}
+                  onClick={() => setViewMode('list')}
+                  size="sm"
+                  className={`${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} rounded-l-none border-l-0`}
+                >
+                  <List className="h-4 w-4 mr-1" /> List View
+                </Button>
+              </div>
+
               {/* Import/Export Actions */}
               {permissionService.hasPermission(user, 'leads', 'create') && (
                 <DropdownMenu>
@@ -329,50 +368,64 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
             </div>
           </div>
 
-          {/* Leads Grid */}
+          {/* Leads Grid/List */}
           {filteredAndSortedLeads.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredAndSortedLeads.map(lead => (
-                <div key={lead.id} className="relative group">
-                  <LeadCard
-                    lead={lead}
-                    onViewDetails={handleViewDetails} // This now navigates
-                    onEditLead={handleEditLead} // This now navigates
-                  />
-
-                  {/* Quick Actions Overlay */}
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="bg-white shadow-md">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleLeadAction(lead, 'view')}>
-                          <FileText className="h-4 w-4 mr-2" />
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleLeadAction(lead, 'notes')}>
-                          <FileText className="h-4 w-4 mr-2" />
-                          View Notes
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleLeadAction(lead, 'tasks')}>
-                          <CheckSquare className="h-4 w-4 mr-2" />
-                          Manage Tasks
-                        </DropdownMenuItem>
-                        {permissionService.canEditLead(user, lead.assignedAgent, lead.createdBy) && (
-                          <DropdownMenuItem onClick={() => handleLeadAction(lead, 'edit')}>
-                            <Building2 className="h-4 w-4 mr-2" />
-                            Edit Lead
+            // Conditional Rendering based on viewMode
+            viewMode === 'card' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredAndSortedLeads.map(lead => (
+                  <div key={lead.id} className="relative group">
+                    <LeadCard
+                      lead={lead}
+                      onViewDetails={handleViewDetails}
+                      onEditLead={handleEditLead}
+                    />
+                    {/* Quick Actions Overlay (Card View Specific) */}
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="bg-white shadow-md">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleLeadAction(lead, 'view')}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            View Details
                           </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          <DropdownMenuItem onClick={() => handleLeadAction(lead, 'notes')}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            View Notes
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleLeadAction(lead, 'tasks')}>
+                            <CheckSquare className="h-4 w-4 mr-2" />
+                            Manage Tasks
+                          </DropdownMenuItem>
+                          {permissionService.canEditLead(user, lead.assignedAgent, lead.createdBy) && (
+                            <DropdownMenuItem onClick={() => handleLeadAction(lead, 'edit')}>
+                              <Building2 className="h-4 w-4 mr-2" />
+                              Edit Lead
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : ( // List View
+              <div className="flex flex-col gap-3">
+                {filteredAndSortedLeads.map(lead => (
+                  <LeadListItem
+                    key={lead.id}
+                    lead={lead}
+                    onViewDetails={handleViewDetails}
+                    onEditLead={handleEditLead}
+                    onStatusChange={handleStatusUpdate}
+                  />
+                ))}
+              </div>
+            )
           ) : (
             <Card className="border-0 shadow-md">
               <CardContent className="text-center py-12">
@@ -413,7 +466,7 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
             </Card>
           )}
 
-          {/* Modals (now only for Add, Import, Export, Notes, Tasks) */}
+          {/* Modals */}
           {permissionService.hasPermission(user, 'leads', 'create') && (
             <>
               <AddLeadModal
@@ -436,21 +489,20 @@ export default function HomePage() { // Renamed from Home to HomePage for clarit
             </>
           )}
 
-          {/* Notes and Tasks modals still handled here, requiring selectedLeadId */}
           {selectedLeadId && (
             <>
               <LeadNotesModal
                 open={isNotesModalOpen}
                 onOpenChange={setIsNotesModalOpen}
-                leadId={selectedLeadId} // Pass ID instead of full lead object
-                onLeadUpdate={handleLeadUpdateFromModal} // Handle lead update from modal
+                leadId={selectedLeadId}
+                onLeadUpdate={handleLeadUpdateFromModal}
               />
 
               {/* <LeadTasksModal
                 open={isTasksModalOpen}
                 onOpenChange={setIsTasksModalOpen}
-                leadId={selectedLeadId} // Pass ID instead of full lead object
-                onLeadUpdate={handleLeadUpdateFromModal} // Assuming LeadTasksModal will also have this prop
+                leadId={selectedLeadId}
+                onLeadUpdate={handleLeadUpdateFromModal}
               /> */}
             </>
           )}

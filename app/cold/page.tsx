@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useLeads, NewLeadData } from '@/hooks/useLeads';
 import { Lead, LeadFilters as Filters } from '@/types/lead';
 import { LeadCard } from '@/components/leads/LeadCard';
+import { LeadListItem } from '@/components/leads/LeadListItem'; // Import LeadListItem
 import { LeadFilters } from '@/components/leads/LeadFilters';
 import { AddLeadModal } from '@/components/leads/AddLeadModal';
 import { LeadExportModal } from '@/components/leads/LeadExportModal';
@@ -17,7 +18,7 @@ import { DashboardMetrics } from '@/components/dashboard/DashboardMetrics';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, Upload, Download, Filter as FilterIcon, Building2, Loader2, Database, MoreHorizontal, FileText, CheckSquare } from 'lucide-react';
+import { Plus, Upload, Download, Filter as FilterIcon, Building2, Loader2, Database, MoreHorizontal, FileText, CheckSquare, LayoutGrid, List } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -25,6 +26,7 @@ import { toast } from 'sonner';
 
 
 type SortOption = 'created-desc' | 'created-asc' | 'name-asc' | 'name-desc' | 'score-high' | 'score-low';
+type ViewMode = 'card' | 'list'; // Define ViewMode type consistent with HomePage
 
 export default function ColdLeadsPage() {
   const router = useRouter();
@@ -35,15 +37,15 @@ export default function ColdLeadsPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
-  // Use a state specifically for the ID of the lead selected for a modal
-  const [selectedLeadIdForModal, setSelectedLeadIdForModal] = useState<string | null>(null); // Correct type: string | null
+  const [selectedLeadIdForModal, setSelectedLeadIdForModal] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('created-desc');
   const [filters, setFilters] = useState<Filters>({});
+  const [viewMode, setViewMode] = useState<ViewMode>('card'); // Initialize with 'card' view
 
   const permissionService = PermissionService.getInstance();
 
   const memoizedFetchLeads = useCallback(() => {
-    fetchLeads('Cold-Lead');
+    fetchLeads('Cold-Lead'); // Explicitly fetch only cold leads
   }, [fetchLeads]);
 
   useEffect(() => {
@@ -51,17 +53,16 @@ export default function ColdLeadsPage() {
   }, [memoizedFetchLeads]);
 
   const userFilteredLeads = useMemo(() => {
-    return permissionService.filterLeadsForUser(leads, user);
+    // Filter by leadType here to ensure only 'Cold-Lead' are considered initially
+    return permissionService.filterLeadsForUser(leads, user).filter(lead => lead.leadType === 'Cold-Lead');
   }, [leads, user]);
 
   const filteredAndSortedLeads = useMemo(() => {
     let filtered = userFilteredLeads.filter(lead => {
-      if (lead.leadType !== 'Cold-Lead') {
-        return false;
-      }
+      // The userFilteredLeads already filters for 'Cold-Lead', so no need to re-check lead.leadType here
       if (filters.search) {
         const searchTerm = filters.search.toLowerCase();
-        const searchableText = `${lead.name} ${lead.primaryEmail} ${lead.primaryPhone}`.toLowerCase();
+        const searchableText = `${lead.name} ${lead.primaryEmail} ${lead.primaryPhone} ${lead.companyName || ''}`.toLowerCase();
         if (!searchableText.includes(searchTerm)) return false;
       }
       if (filters.status && filters.status.length > 0) {
@@ -92,8 +93,8 @@ export default function ColdLeadsPage() {
       const scoreA = a.leadScore as LeadScore;
       const scoreB = b.leadScore as LeadScore;
       switch (sortBy) {
-        case 'created-desc': return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case 'created-asc': return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case 'created-desc': return b.createdAt.getTime() - a.createdAt.getTime();
+        case 'created-asc': return a.createdAt.getTime() - b.createdAt.getTime();
         case 'name-asc': return a.name.localeCompare(b.name);
         case 'name-desc': return b.name.localeCompare(a.name);
         case 'score-high': return scoreOrder[scoreB] - scoreOrder[scoreA];
@@ -106,19 +107,19 @@ export default function ColdLeadsPage() {
 
   const leadCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    // Only count cold leads
     userFilteredLeads.forEach(lead => {
-      if (lead.leadType === 'Cold-Lead') {
-        counts[lead.status] = (counts[lead.status] || 0) + 1;
-      }
+      counts[lead.status] = (counts[lead.status] || 0) + 1;
     });
     return counts;
   }, [userFilteredLeads]);
 
   const handleAddLead = async (newLeadData: NewLeadData): Promise<Lead> => {
     try {
+      // Ensure leadType is set to 'Cold-Lead' for this page
       const createdLead = await createLead({ ...newLeadData, leadType: 'Cold-Lead' });
       toast.success('Cold Lead created successfully!');
-      memoizedFetchLeads();
+      memoizedFetchLeads(); // Refresh cold leads after creation
       return createdLead;
     } catch (error) {
       console.error('Failed to create cold lead:', error);
@@ -127,9 +128,30 @@ export default function ColdLeadsPage() {
     }
   };
 
-  const handleLeadUpdateFromModal = useCallback((updatedLead: Lead) => {
-    memoizedFetchLeads();
+  const handleLeadUpdateFromModal = useCallback(() => {
+    memoizedFetchLeads(); // Refresh cold leads after modal update
   }, [memoizedFetchLeads]);
+
+  const handleStatusUpdate = useCallback(async (leadId: string, newStatus: Lead['status']) => {
+    try {
+      const leadToUpdate = leads.find(l => l.id === leadId && l.leadType === 'Cold-Lead');
+      if (!leadToUpdate) {
+        throw new Error("Cold Lead not found for status update.");
+      }
+
+      if (!permissionService.canEditLead(user, leadToUpdate.assignedAgent, leadToUpdate.createdBy)) {
+        toast.error("You don't have permission to change the status of this cold lead.");
+        return;
+      }
+
+      await updateLead(leadId, { status: newStatus });
+      toast.success(`Cold Lead status updated for ${leadToUpdate.name}`);
+    } catch (error: any) {
+      console.error('Failed to update cold lead status:', error);
+      toast.error(`Failed to update status: ${error.message || 'Unknown error'}`);
+      memoizedFetchLeads(); // Re-fetch to ensure UI consistency
+    }
+  }, [leads, updateLead, user, permissionService, memoizedFetchLeads]);
 
 
   const handleViewDetails = (lead: Lead) => {
@@ -149,10 +171,11 @@ export default function ColdLeadsPage() {
   };
 
   const handleLeadAction = (lead: Lead, action: string) => {
-    // --- FIX IS HERE ---
-    // Pass the lead.id (string) to the state, not the whole lead object
+    if (!permissionService.canAccessLead(user, lead.assignedAgent)) {
+      toast.error("You don't have permission to perform actions on this cold lead.");
+      return;
+    }
     setSelectedLeadIdForModal(lead.id);
-    // --- END FIX ---
     switch (action) {
       case 'notes':
         setIsNotesModalOpen(true);
@@ -163,6 +186,11 @@ export default function ColdLeadsPage() {
       case 'edit':
         handleEditLead(lead);
         break;
+      case 'view': // Added view action for consistency with HomePage LeadCard dropdown
+        handleViewDetails(lead);
+        break;
+      default:
+        break;
     }
   };
 
@@ -171,11 +199,6 @@ export default function ColdLeadsPage() {
     memoizedFetchLeads();
     setIsImportModalOpen(false);
   };
-
-  const handleAddNoteToLead = useCallback(async (noteContent: string) => {
-    // This function can remain as a placeholder or be removed, as LeadNotesModal now handles its own save.
-    // The key is that `onLeadUpdate` from the modal will trigger the parent's refresh.
-  }, []);
 
   if (loading) {
     return (
@@ -225,6 +248,26 @@ export default function ColdLeadsPage() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
+              {/* View Mode Toggle (Copied from HomePage) */}
+              <div className="flex rounded-md shadow-sm" role="group">
+                <Button
+                  variant={viewMode === 'card' ? 'default' : 'outline'}
+                  onClick={() => setViewMode('card')}
+                  size="sm"
+                  className={`${viewMode === 'card' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} rounded-r-none`}
+                >
+                  <LayoutGrid className="h-4 w-4 mr-1" /> Card View
+                </Button>
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'outline'}
+                  onClick={() => setViewMode('list')}
+                  size="sm"
+                  className={`${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'} rounded-l-none border-l-0`}
+                >
+                  <List className="h-4 w-4 mr-1" /> List View
+                </Button>
+              </div>
+
               {/* Import/Export Actions */}
               {permissionService.hasPermission(user, 'leads', 'create') && (
                 <DropdownMenu>
@@ -272,7 +315,7 @@ export default function ColdLeadsPage() {
           {/* Sort and Results */}
           <div className="flex items-center justify-between mb-6">
             <div className="text-sm text-gray-600">
-              Showing {filteredAndSortedLeads.length} of {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length} cold leads
+              Showing {filteredAndSortedLeads.length} of {userFilteredLeads.length} cold leads
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">Sort by:</span>
@@ -292,55 +335,72 @@ export default function ColdLeadsPage() {
             </div>
           </div>
 
-          {/* Leads Grid */}
+          {/* Leads Display - Conditional Rendering */}
           {filteredAndSortedLeads.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredAndSortedLeads.map(lead => (
-                <div key={lead.id} className="relative group">
-                  <LeadCard
+            viewMode === 'card' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredAndSortedLeads.map(lead => (
+                  <div key={lead.id} className="relative group">
+                    <LeadCard
+                      lead={lead}
+                      onViewDetails={handleViewDetails}
+                      onEditLead={handleEditLead}
+                    />
+                    {/* Quick Actions Overlay (Card View Specific) */}
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="bg-white shadow-md">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                           <DropdownMenuItem onClick={() => handleLeadAction(lead, 'view')}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleLeadAction(lead, 'notes')}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            View Notes
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleLeadAction(lead, 'tasks')}>
+                            <CheckSquare className="h-4 w-4 mr-2" />
+                            Manage Tasks
+                          </DropdownMenuItem>
+                          {permissionService.canEditLead(user, lead.assignedAgent, lead.createdBy) && (
+                            <DropdownMenuItem onClick={() => handleLeadAction(lead, 'edit')}>
+                              <Building2 className="h-4 w-4 mr-2" />
+                              Edit Lead
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : ( // List View
+              <div className="flex flex-col gap-3">
+                {filteredAndSortedLeads.map(lead => (
+                  <LeadListItem
+                    key={lead.id}
                     lead={lead}
                     onViewDetails={handleViewDetails}
                     onEditLead={handleEditLead}
+                    onStatusChange={handleStatusUpdate}
                   />
-
-                  {/* Quick Actions Overlay */}
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="bg-white shadow-md">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleLeadAction(lead, 'notes')}>
-                          <FileText className="h-4 w-4 mr-2" />
-                          View Notes
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleLeadAction(lead, 'tasks')}>
-                          <CheckSquare className="h-4 w-4 mr-2" />
-                          Manage Tasks
-                        </DropdownMenuItem>
-                        {permissionService.canEditLead(user, lead.assignedAgent, lead.createdBy) && (
-                          <DropdownMenuItem onClick={() => handleLeadAction(lead, 'edit')}>
-                            <Building2 className="h-4 w-4 mr-2" />
-                            Edit Lead
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )
           ) : (
             <Card className="border-0 shadow-md">
               <CardContent className="text-center py-12">
                 <Database className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length === 0 ? 'No cold leads in database' : 'No cold leads found'}
+                  {userFilteredLeads.length === 0 ? 'No cold leads in database' : 'No cold leads found'}
                 </h3>
                 <p className="text-gray-600 mb-6">
-                  {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length === 0
+                  {userFilteredLeads.length === 0
                     ? user?.role === 'agent'
                       ? "You don't have any cold leads assigned to you yet. Contact your admin or start adding leads."
                       : "Your cold leads database is empty. Start by adding your first cold lead to begin managing your real estate prospects."
@@ -355,9 +415,9 @@ export default function ColdLeadsPage() {
                       className="bg-blue-600 hover:bg-blue-700"
                     >
                       <Plus className="h-4 w-4 mr-2" />
-                      {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length === 0 ? 'Add Your First Cold Lead' : 'Add New Cold Lead'}
+                      {userFilteredLeads.length === 0 ? 'Add Your First Cold Lead' : 'Add New Cold Lead'}
                     </Button>
-                    {userFilteredLeads.filter(lead => lead.leadType === 'Cold-Lead').length === 0 && (
+                    {userFilteredLeads.length === 0 && (
                       <Button
                         variant="outline"
                         onClick={() => setIsImportModalOpen(true)}
@@ -395,21 +455,20 @@ export default function ColdLeadsPage() {
             </>
           )}
 
-          {/* Conditional rendering for notes and tasks modals */}
           {selectedLeadIdForModal && (
             <>
               <LeadNotesModal
                 open={isNotesModalOpen}
                 onOpenChange={setIsNotesModalOpen}
-                leadId={selectedLeadIdForModal} // Now correctly passing the string ID
+                leadId={selectedLeadIdForModal}
                 onLeadUpdate={handleLeadUpdateFromModal}
               />
-              
+
               {/* <LeadTasksModal
                 open={isTasksModalOpen}
                 onOpenChange={setIsTasksModalOpen}
-                lead={leads.find(l => l.id === selectedLeadIdForModal) || null} // Find the lead by ID if LeadTasksModal still expects the full object
-                onUpdateLead={handleLeadUpdateFromModal}
+                leadId={selectedLeadIdForModal}
+                onLeadUpdate={handleLeadUpdateFromModal}
               /> */}
             </>
           )}

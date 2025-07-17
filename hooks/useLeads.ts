@@ -4,36 +4,59 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Lead, Activity } from '@/types/lead';
 
-// Define the shape of data required for adding a new lead (without backend-generated fields)
+// Helper function to convert date strings to Date objects for a single Lead
+const parseLeadDates = (lead: any): Lead => {
+  return {
+    ...lead,
+    createdAt: new Date(lead.createdAt),
+    updatedAt: new Date(lead.updatedAt),
+    lastContacted: lead.lastContacted ? new Date(lead.lastContacted) : undefined,
+    activities: lead.activities.map((activity: any) => ({
+      ...activity,
+      date: new Date(activity.date), // Convert activity date
+    })),
+  };
+};
+
+// Define the shape of data required for adding a new lead
 export type NewLeadData = Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'activities' | 'lastContacted' | 'attachments'> & {
-  activities?: Activity[]; // Ensure activities can be included when creating, even if empty
-  attachments?: string[]; // Ensure attachments can be included
+  activities?: (Omit<Activity, 'id'> & { date: Date | string })[];
+  attachments?: string[];
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+  lastContacted?: Date | string;
 };
 
 // Define the shape of data required for updating an existing lead
-export type UpdateLeadData = Partial<Omit<Lead, 'createdAt' | 'updatedAt'>>; // Make sure it's partial and omits backend-generated fields
+export type UpdateLeadData = Partial<Omit<Lead, 'createdAt' | 'updatedAt'>> & {
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+  lastContacted?: Date | string;
+  activities?: (Activity | (Omit<Activity, 'id'> & { date: Date | string }))[];
+};
+
 
 // Extend the hook return type to include the typed fetch function
 interface UseLeadsReturn {
   leads: Lead[];
   loading: boolean;
   error: string | null;
-  fetchLeads: (leadType?: 'Lead' | 'Cold-Lead') => Promise<void>; // Updated signature
+  fetchLeads: (leadType?: 'Lead' | 'Cold-Lead') => Promise<void>;
   createLead: (leadData: NewLeadData) => Promise<Lead>;
   updateLead: (id: string, updateData: UpdateLeadData) => Promise<Lead>;
   deleteLead: (id: string) => Promise<void>;
-  addActivity: (leadId: string, activityData: Omit<Activity, 'id'> & { date?: Date | string }) => Promise<Lead>;
-  getLeadById: (id: string) => Promise<Lead | null>; // Added getLeadById
+  addActivity: (leadId: string, activityData: Omit<Activity, 'id'> & { date: Date | string }) => Promise<Lead>;
+  getLeadById: (id: string) => Promise<Lead | null>;
 }
 
-export function useLeads(): UseLeadsReturn { // Apply the extended return type
+export function useLeads(): UseLeadsReturn {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Helper to get authorization headers
   const getAuthHeaders = useCallback(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null; // Safely access localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     return {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` }),
@@ -56,8 +79,10 @@ export function useLeads(): UseLeadsReturn { // Apply the extended return type
       console.log('Response status:', response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log('Fetched leads data:', data);
-        setLeads(Array.isArray(data) ? data : []);
+        console.log('Fetched leads data (raw):', data);
+        const parsedLeads = Array.isArray(data) ? data.map(parseLeadDates) : [];
+        setLeads(parsedLeads);
+        console.log('Fetched leads data (parsed):', parsedLeads);
       } else {
         const errorData = await response.json().catch(() => ({ message: 'Failed to fetch leads' }));
         console.error('Fetch error:', errorData);
@@ -66,13 +91,12 @@ export function useLeads(): UseLeadsReturn { // Apply the extended return type
     } catch (err) {
       console.error('Error fetching leads:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch leads');
-      setLeads([]); // Clear leads on fetch error
+      setLeads([]);
     } finally {
       setLoading(false);
     }
   }, [getAuthHeaders]);
 
-  // New function to get a single lead by ID
   const getLeadById = useCallback(async (id: string): Promise<Lead | null> => {
     try {
       const response = await fetch(`/api/leads/${id}`, {
@@ -82,9 +106,9 @@ export function useLeads(): UseLeadsReturn { // Apply the extended return type
 
       if (response.ok) {
         const lead = await response.json();
-        return lead;
+        return parseLeadDates(lead);
       } else if (response.status === 404) {
-        return null; // Lead not found
+        return null;
       } else {
         const errorData = await response.json().catch(() => ({ message: 'Failed to fetch lead by ID' }));
         console.error(`Failed to fetch lead ${id}:`, response.status, errorData);
@@ -92,7 +116,7 @@ export function useLeads(): UseLeadsReturn { // Apply the extended return type
       }
     } catch (err) {
       console.error(`Error fetching lead ${id}:`, err);
-      throw err; // Re-throw to be handled by the calling component
+      throw err;
     }
   }, [getAuthHeaders]);
 
@@ -100,24 +124,41 @@ export function useLeads(): UseLeadsReturn { // Apply the extended return type
   const createLead = useCallback(async (
     leadData: NewLeadData
   ): Promise<Lead> => {
-    // Ensure leadType is explicitly set when creating a new lead from the frontend
-    // You might want to make leadType non-optional in NewLeadData if it's always required at creation.
-    // For now, assuming it's part of the passed leadData.
-    if (!leadData.leadType) { // Basic check, consider making it a mandatory field in NewLeadData
+    if (!leadData.leadType) {
       throw new Error("leadType is required to create a new lead.");
+    }
+
+    const dataToSend: { [key: string]: any } = { ...leadData };
+
+    if (dataToSend.createdAt instanceof Date) {
+      dataToSend.createdAt = dataToSend.createdAt.toISOString();
+    }
+    if (dataToSend.updatedAt instanceof Date) {
+      dataToSend.updatedAt = dataToSend.updatedAt.toISOString();
+    }
+    if (dataToSend.lastContacted instanceof Date) {
+      dataToSend.lastContacted = dataToSend.lastContacted.toISOString();
+    }
+
+    if (dataToSend.activities) {
+        dataToSend.activities = dataToSend.activities.map((activity: { date: Date | string }) => ({
+            ...activity,
+            date: activity.date instanceof Date ? activity.date.toISOString() : activity.date
+        }));
     }
 
     try {
       const response = await fetch('/api/leads', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(leadData),
+        body: JSON.stringify(dataToSend),
       });
 
       if (response.ok) {
         const newLead = await response.json();
-        setLeads(prev => [newLead, ...prev]);
-        return newLead;
+        const parsedNewLead = parseLeadDates(newLead);
+        setLeads(prev => [parsedNewLead, ...prev]);
+        return parsedNewLead;
       } else {
         const errorData = await response.json().catch(() => ({ message: 'Failed to create lead' }));
         console.error('Create failed:', response.status, errorData);
@@ -131,22 +172,35 @@ export function useLeads(): UseLeadsReturn { // Apply the extended return type
 
 
   const updateLead = useCallback(async (id: string, updateData: UpdateLeadData): Promise<Lead> => {
+    const dataToSend: { [key: string]: any } = { ...updateData };
+
+    if (dataToSend.lastContacted instanceof Date) {
+      dataToSend.lastContacted = dataToSend.lastContacted.toISOString();
+    }
+    if (dataToSend.activities) {
+        dataToSend.activities = dataToSend.activities.map((activity: { date: Date | string }) => ({
+            ...activity,
+            date: activity.date instanceof Date ? activity.date.toISOString() : activity.date
+        }));
+    }
+
     try {
-      console.log('Attempting to update lead with ID:', id, 'Data being sent:', updateData);
+      console.log('Attempting to update lead with ID:', id, 'Data being sent:', dataToSend);
 
       const response = await fetch(`/api/leads/${id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify(updateData),
+        body: JSON.stringify(dataToSend),
       });
 
       console.log('Update API response status:', response.status);
 
       if (response.ok) {
         const updatedLead = await response.json();
-        setLeads(prev => prev.map(lead => (lead.id === id ? updatedLead : lead)));
-        console.log('Lead updated successfully, received data:', updatedLead);
-        return updatedLead;
+        const parsedUpdatedLead = parseLeadDates(updatedLead);
+        setLeads(prev => prev.map(lead => (lead.id === id ? parsedUpdatedLead : lead)));
+        console.log('Lead updated successfully, received data:', parsedUpdatedLead);
+        return parsedUpdatedLead;
       } else {
         let errorDetails: string = 'Unknown error';
         try {
@@ -189,19 +243,26 @@ export function useLeads(): UseLeadsReturn { // Apply the extended return type
 
   const addActivity = useCallback(async (
     leadId: string,
-    activityData: Omit<Activity, 'id'> & { date?: Date | string }
+    activityData: Omit<Activity, 'id'> & { date: Date | string }
   ): Promise<Lead> => {
+    // Prepare dataToSend for an activity, ensuring 'date' is a Date object as required by Activity interface.
+    const dataToSend: Omit<Activity, 'id'> = {
+        ...activityData,
+        date: activityData.date instanceof Date ? activityData.date : new Date(activityData.date)
+    };
+
     try {
       const response = await fetch(`/api/leads/${leadId}/activities`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(activityData),
+        body: JSON.stringify(dataToSend),
       });
 
       if (response.ok) {
         const updatedLead = await response.json();
-        setLeads(prev => prev.map(lead => (lead.id === leadId ? updatedLead : lead)));
-        return updatedLead;
+        const parsedUpdatedLead = parseLeadDates(updatedLead);
+        setLeads(prev => prev.map(lead => (lead.id === leadId ? parsedUpdatedLead : lead)));
+        return parsedUpdatedLead;
       } else {
         const errorData = await response.json().catch(() => ({ message: 'Failed to add activity' }));
         console.error('Add activity failed:', response.status, errorData);
@@ -222,6 +283,6 @@ export function useLeads(): UseLeadsReturn { // Apply the extended return type
     updateLead,
     deleteLead,
     addActivity,
-    getLeadById, // Now exposed
+    getLeadById,
   };
 }
