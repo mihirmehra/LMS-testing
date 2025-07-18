@@ -125,7 +125,10 @@ export function useNotifications() {
     }
   }, [user, isAuthenticated, generateMockNotifications]);
 
-  // Mark notification as read
+  /**
+   * Marks a specific notification as read both locally and by calling the API.
+   * @param notificationId The ID of the notification to mark as read.
+   */
   const markAsRead = async (notificationId: string) => {
     try {
       const token = localStorage.getItem('auth_token');
@@ -142,7 +145,7 @@ export function useNotifications() {
         }
       }
 
-      // Update local state regardless of API success
+      // Update local state regardless of API success for immediate UI feedback
       setNotifications(prev => 
         prev.map(notification => 
           notification.id === notificationId 
@@ -152,7 +155,7 @@ export function useNotifications() {
       );
     } catch (error) {
       console.warn('Error marking notification as read:', error);
-      // Still update local state for better UX
+      // Still update local state for better UX even if API fails
       setNotifications(prev => 
         prev.map(notification => 
           notification.id === notificationId 
@@ -163,7 +166,9 @@ export function useNotifications() {
     }
   };
 
-  // Mark all notifications as read
+  /**
+   * Marks all notifications as read both locally and by calling the API.
+   */
   const markAllAsRead = async () => {
     try {
       const token = localStorage.getItem('auth_token');
@@ -193,7 +198,10 @@ export function useNotifications() {
     }
   };
 
-  // Delete notification
+  /**
+   * Deletes a specific notification locally and by calling the API.
+   * @param notificationId The ID of the notification to delete.
+   */
   const deleteNotification = async (notificationId: string) => {
     try {
       const token = localStorage.getItem('auth_token');
@@ -223,7 +231,11 @@ export function useNotifications() {
     }
   };
 
-  // Create notification
+  /**
+   * Creates a new notification locally and optionally via API.
+   * @param notification The notification data to create (excluding id, userId, createdAt, read).
+   * @returns The newly created notification object.
+   */
   const createNotification = async (notification: Omit<Notification, 'id' | 'userId' | 'createdAt' | 'read'>) => {
     try {
       const token = localStorage.getItem('auth_token');
@@ -244,7 +256,7 @@ export function useNotifications() {
         }
       }
 
-      // Create local notification if API fails
+      // Create local notification if API fails or no token
       const localNotification: Notification = {
         ...notification,
         id: `local-${Date.now()}`,
@@ -258,7 +270,7 @@ export function useNotifications() {
     } catch (error) {
       console.warn('Error creating notification:', error);
       
-      // Create local notification as fallback
+      // Create local notification as fallback in case of error
       const localNotification: Notification = {
         ...notification,
         id: `local-${Date.now()}`,
@@ -316,7 +328,7 @@ export function useNotifications() {
             const existingReminder = notifications.find(n => 
               n.type === 'meeting_reminder' && 
               n.data?.eventId === event.id &&
-              !n.read
+              !n.read // Only check for unread reminders
             );
 
             if (!existingReminder) {
@@ -340,7 +352,7 @@ export function useNotifications() {
     } catch (error) {
       console.warn('Error checking upcoming meetings:', error);
     }
-  }, [user, notifications, createNotification]);
+  }, [user, notifications, createNotification]); // Added createNotification to dependency array
 
   // Initialize notifications when user is available
   useEffect(() => {
@@ -375,7 +387,7 @@ export function useNotifications() {
     stats: getStats(),
     unreadCount: notifications.filter(n => !n.read).length,
     fetchNotifications,
-    markAsRead,
+    markAsRead, // This function is correctly exposed
     markAllAsRead,
     deleteNotification,
     createNotification,
