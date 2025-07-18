@@ -112,7 +112,11 @@ export function LeadCard({ lead, onViewDetails, onEditLead }: LeadCardProps) {
             </div>
             <div className="flex items-center space-x-2 text-gray-600">
               <MapPin className="h-4 w-4 text-gray-400" />
-              <span>{lead.preferredLocations.join(', ')}</span>
+              <span>
+                {lead.preferredLocations && Array.isArray(lead.preferredLocations) && lead.preferredLocations.length > 0
+                  ? lead.preferredLocations.join(', ')
+                  : 'N/A'} {/* Or an empty string '' if you prefer nothing */}
+              </span>
             </div>
             <div className="flex items-center space-x-2 text-gray-600">
               <DollarSign className="h-4 w-4 text-gray-400" />

@@ -58,6 +58,9 @@ export async function PUT(
     const { id } = params;
     const updateData = await request.json();
 
+    console.log(`[API PUT] Attempting to update lead ID: ${id}`);
+    console.log(`[API PUT] Received update data:`, updateData);
+
     if (!id) {
       return NextResponse.json(
         { error: 'Lead ID is required' },
@@ -75,9 +78,7 @@ export async function PUT(
     const db = await getDatabase();
     const leadsCollection = db.collection('leads');
 
-    // Remove _id from updateData if present, as _id cannot be updated
-    const { _id, ...dataToUpdate } = updateData;
-
+    const { _id, ...dataToUpdate } = updateData; // Remove _id from updateData if present
     dataToUpdate.updatedAt = new Date(); // Ensure updatedAt is set/updated
 
     const result = await leadsCollection.findOneAndUpdate(
@@ -86,17 +87,22 @@ export async function PUT(
       { returnDocument: 'after' } // Return the updated document
     );
 
-    if (!result?.value) {
+    console.log(`[API PUT] Raw result from findOneAndUpdate:`, result);
+
+    // FIX: Check if 'result' itself is null/undefined, not 'result.value'
+    if (!result) {
+      console.warn(`[API PUT] Lead not found for update, returning 404 for ID: ${id}. FindOneAndUpdate returned null/undefined.`);
       return NextResponse.json(
         { error: 'Lead not found for update' },
         { status: 404 }
       );
     }
 
-    // Convert _id of the updated document to string 'id'
-    const { _id: updatedDocId, ...restOfUpdatedLead } = result.value;
+    // FIX: Access the document directly from 'result'
+    const { _id: updatedDocId, ...restOfUpdatedLead } = result;
     const updatedLead = { id: updatedDocId.toString(), ...restOfUpdatedLead };
 
+    console.log(`[API PUT] Successfully updated lead ID: ${id}, returning 200.`);
     return NextResponse.json(updatedLead);
   } catch (error) {
     console.error('API Error (PUT lead by ID):', error);
@@ -106,7 +112,6 @@ export async function PUT(
     );
   }
 }
-
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }

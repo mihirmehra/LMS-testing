@@ -11,11 +11,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useLeads } from '@/hooks/useLeads';
 import { Lead } from '@/types/lead';
-import { 
-  Users, 
-  UserPlus, 
-  ArrowRight, 
-  CheckCircle2, 
+import { useNotifications } from '@/hooks/useNotifications'; // Import useNotifications hook
+import {
+  Users,
+  UserPlus,
+  ArrowRight,
+  CheckCircle2,
   Clock,
   Filter,
   Search,
@@ -28,7 +29,8 @@ interface LeadAssignmentProps {
 }
 
 export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
-  const { leads,  updateLead, fetchLeads } = useLeads();
+  const { leads, updateLead, fetchLeads } = useLeads();
+  const { createNotification } = useNotifications(); // Access createNotification from the hook
   const [agents, setAgents] = useState<any[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
@@ -37,10 +39,10 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('unassigned');
-  
+
 
   useEffect(() => {
-    fetchLeads(); 
+    fetchLeads();
     fetchAgents();
   }, [fetchLeads]);
 
@@ -54,7 +56,7 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         },
       });
-      
+
       if (response.ok) {
         const users = await response.json();
         // Filter to only include users with role 'agent'
@@ -116,22 +118,43 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
     }
 
     setLoading(true);
+    const agentName = getAgentName(selectedAgent);
     try {
       // Update each selected lead
       for (const leadId of selectedLeads) {
         await updateLead(leadId, { assignedAgent: selectedAgent });
       }
 
-      setMessage({ 
-        type: 'success', 
-        text: `Successfully assigned ${selectedLeads.length} lead(s) to agent` 
+      setMessage({
+        type: 'success',
+        text: `Successfully assigned ${selectedLeads.length} lead(s) to agent`
       });
+
+      // Trigger success notification
+      createNotification({
+        title: 'Leads Assigned!',
+        message: `${selectedLeads.length} lead(s) have been successfully assigned to ${agentName}.`,
+        type: 'lead_update', // Corrected type: 'lead_update' is valid
+        priority: 'high',
+        actionUrl: '/leads', // Optional: link to a leads management page
+        actionLabel: 'View Leads'
+      });
+
       setSelectedLeads([]);
       setSelectedAgent('');
       setIsAssignModalOpen(false);
       onAssignmentComplete?.();
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to assign leads' });
+      console.error('Lead assignment error:', error);
+
+      // Trigger error notification
+      createNotification({
+        title: 'Lead Assignment Failed',
+        message: `Failed to assign leads. Please try again.`,
+        type: 'system_alert', // Corrected type: 'system_alert'
+        priority: 'high',
+      });
     } finally {
       setLoading(false);
     }
@@ -268,7 +291,7 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
                 <div className="space-y-3">
                   <div className="text-sm text-gray-600">
                     <p><strong>Budget:</strong> {lead.budgetRange}</p>
-                    <p><strong>Locations:</strong> {lead.preferredLocations.join(', ')}</p>
+                    <p><strong>Locations:</strong> {lead.preferredLocations && Array.isArray(lead.preferredLocations) && lead.preferredLocations.length > 0 ? lead.preferredLocations.join(', ') : 'N/A'} {/* Or an empty string '' if you prefer nothing */}</p>
                     <p><strong>Source:</strong> {lead.source}</p>
                   </div>
 
@@ -307,7 +330,7 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
             <p className="text-gray-600">
               {leads.length === 0
                 ? "No leads found in the database. Create leads first to assign them to agents."
-                : filterStatus === 'unassigned' 
+                : filterStatus === 'unassigned'
                 ? "All leads have been assigned to agents."
                 : "Try adjusting your filters to find leads."}
             </p>
@@ -378,15 +401,15 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
             </div>
           </div>
           <DialogFooter>
-            <Button 
-              type="button" 
-              variant="outline" 
+            <Button
+              type="button"
+              variant="outline"
               onClick={() => setIsAssignModalOpen(false)}
             >
               Cancel
             </Button>
-            <Button 
-              onClick={handleAssignLeads} 
+            <Button
+              onClick={handleAssignLeads}
               disabled={loading || !selectedAgent || selectedAgent === "none"}
               className="bg-green-600 hover:bg-green-700"
             >

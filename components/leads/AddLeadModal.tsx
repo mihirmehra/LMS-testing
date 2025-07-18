@@ -8,13 +8,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
+// import { Checkbox } from '@/components/ui/checkbox'; // Still not needed
+
 import { Lead } from '@/types/lead';
 import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
 import { budgetRanges, locations } from '@/lib/mockData';
-import { NewLeadData } from '@/hooks/useLeads';
-import { toast } from 'sonner'; // Still good for general feedback, but we'll add in-modal too
+import { NewLeadData } from '@/hooks/useLeads'; // This type needs to be updated!
+import { toast } from 'sonner';
+
+// Imports for the searchable multi-select box
+import * as React from "react";
+import { Check, ChevronsUpDown, XCircle } from "lucide-react"; // Added XCircle for remove button on tags
+import { cn } from "@/lib/utils"; // Assuming this utility is available for Tailwind class merging
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from '@/components/ui/badge'; // Assuming you have a Badge component for tags
 
 interface AddLeadModalProps {
   open: boolean;
@@ -29,7 +48,11 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
   const [agents, setAgents] = useState<any[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null); // NEW: State for in-modal error
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  // States for the searchable multi-select box
+  const [locationSelectOpen, setLocationSelectOpen] = React.useState(false);
+  const [locationSearchValue, setLocationSearchValue] = React.useState("");
 
   const initialFormData = {
     name: '',
@@ -39,7 +62,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
     secondaryEmail: '',
     propertyType: 'Residential' as Lead['propertyType'],
     budgetRange: '',
-    preferredLocations: [] as string[],
+    preferredLocations: [] as string[], // REVERTED: Back to string array for multiple selections
     source: 'Website' as Lead['source'],
     status: 'New' as Lead['status'],
     assignedAgent: '',
@@ -60,7 +83,9 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
         createdBy: user?.id || 'system',
         assignedAgent: (user?.role === 'agent' && !permissionService.canAssignLeads(user)) ? user.id : '',
       });
-      setModalError(null); // Clear error when modal opens
+      setModalError(null);
+      setLocationSelectOpen(false);
+      setLocationSearchValue("");
     }
   }, [open, user?.id, user?.role, permissionService]);
 
@@ -110,14 +135,46 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
   };
 
   const handlePhoneChange = (field: 'primaryPhone' | 'secondaryPhone', value: string) => {
-    // Clear any phone-related error when the user starts typing again
     setModalError(null);
     setFormData(prev => ({ ...prev, [field]: formatPhoneNumber(value) }));
   };
 
+  // UPDATED: Handler for multi-select location combobox
+  const handlePreferredLocationSelect = (selectedLocation: string) => {
+    setFormData(prev => {
+      const currentLocations = prev.preferredLocations || []; // Ensure it's an array
+      if (currentLocations.includes(selectedLocation)) {
+        // If already selected, remove it
+        return {
+          ...prev,
+          preferredLocations: currentLocations.filter(loc => loc !== selectedLocation),
+        };
+      } else {
+        // If not selected, add it
+        return {
+          ...prev,
+          preferredLocations: [...currentLocations, selectedLocation],
+        };
+      }
+    });
+    // Keep popover open for continued selection, but clear search
+    setLocationSearchValue("");
+    // Optionally close if only one selection is desired at a time for search, but not for multi-select
+    // setLocationSelectOpen(false);
+  };
+
+  // Function to remove a selected badge
+  const removeLocationBadge = (locationToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      preferredLocations: prev.preferredLocations.filter(loc => loc !== locationToRemove),
+    }));
+  };
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setModalError(null); // Clear previous errors on new submission attempt
+    setModalError(null);
 
     if (!formData.name || !formData.primaryPhone || !formData.primaryEmail) {
       const msg = 'Please fill in all required fields: Full Name, Primary Phone, Primary Email.';
@@ -126,7 +183,6 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
       return;
     }
 
-    // Duplicate primary phone number check
     const existingLeadWithPhone = existingLeads.find(
       (lead) => lead.primaryPhone === formData.primaryPhone
     );
@@ -166,20 +222,6 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
     }
   };
 
-  const handleLocationChange = (location: string, checked: boolean) => {
-    if (checked) {
-      setFormData(prev => ({
-        ...prev,
-        preferredLocations: [...prev.preferredLocations, location]
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        preferredLocations: prev.preferredLocations.filter(l => l !== location)
-      }));
-    }
-  };
-
   const canAssignLeads = permissionService.canAssignLeads(user);
 
   return (
@@ -192,7 +234,6 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
           </DialogDescription>
         </DialogHeader>
 
-        {/* NEW: Error message display */}
         {modalError && (
           <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-md mb-4" role="alert">
             <p className="font-semibold">Error:</p>
@@ -223,7 +264,6 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                   onChange={(e) => handlePhoneChange('primaryPhone', e.target.value)}
                   placeholder="+91XXXXXXXXXX"
                   required
-                  // Add a red border if there's a phone-related error
                   className={modalError && modalError.includes('phone number already exists') ? 'border-red-500' : ''}
                 />
                 <p className="text-xs text-gray-500 mt-1">Format: +91XXXXXXXXXX</p>
@@ -397,23 +437,70 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
             </div>
           </div>
 
-          {/* Preferred Locations */}
+          {/* Preferred Locations - NOW THE MULTI-SELECT SEARCHABLE COMBOBOX */}
           <div>
-            <Label className="text-sm font-medium">Preferred Locations</Label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-              {locations.map(location => (
-                <div key={location} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`location-${location}`}
-                    checked={formData.preferredLocations.includes(location)}
-                    onCheckedChange={(checked) => handleLocationChange(location, checked as boolean)}
+            <Label htmlFor="preferred-locations-search" className="text-sm font-medium">Preferred Locations</Label>
+            <Popover open={locationSelectOpen} onOpenChange={setLocationSelectOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={locationSelectOpen}
+                  className="w-full justify-between mt-2 h-auto min-h-10 px-3 py-2" // Adjust height for tags
+                >
+                  <div className="flex flex-wrap gap-1 items-center">
+                    {formData.preferredLocations.length > 0 ? (
+                      formData.preferredLocations.map(location => (
+                        <Badge key={location} className="flex items-center gap-1 pr-1">
+                          {location}
+                          <XCircle
+                            className="h-3 w-3 cursor-pointer text-gray-500 hover:text-red-500 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent opening popover when clicking X
+                              removeLocationBadge(location);
+                            }}
+                          />
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-gray-500">Select locations...</span>
+                    )}
+                  </div>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                <Command>
+                  <CommandInput
+                    placeholder="Search locations..."
+                    value={locationSearchValue}
+                    onValueChange={setLocationSearchValue}
                   />
-                  <Label htmlFor={`location-${location}`} className="text-sm">
-                    {location}
-                  </Label>
-                </div>
-              ))}
-            </div>
+                  <CommandEmpty>No location found.</CommandEmpty>
+                  <CommandGroup>
+                    {locations
+                      .filter(location =>
+                        location.toLowerCase().includes(locationSearchValue.toLowerCase())
+                      )
+                      .map((location) => (
+                        <CommandItem
+                          key={location}
+                          value={location} // CommandItem uses 'value' for filtering
+                          onSelect={() => handlePreferredLocationSelect(location)}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              formData.preferredLocations.includes(location) ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          {location}
+                        </CommandItem>
+                      ))}
+                  </CommandGroup>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Notes */}

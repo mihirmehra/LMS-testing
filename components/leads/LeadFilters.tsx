@@ -21,9 +21,11 @@ interface LeadFiltersProps {
 }
 
 const statusOptions = [
-  'New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled', 
+  'New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled','RNR', 'Busy', 'Disconnected', 'Not Interested', 'Not Interested (project)', 'Low Potential',
   'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'
 ];
+
+
 
 const sourceOptions = ['Website', 'Referral', 'Social Media', 'Walk-in', 'Advertisement', 'Other'];
 const propertyTypeOptions = ['Residential', 'Commercial', 'Land'];
@@ -141,6 +143,31 @@ export function LeadFilters({ filters, onFiltersChange, leadCounts }: LeadFilter
                 )}
               </Button>
             ))}
+          </div>
+          <div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Lead Score</Label>
+                <div className="space-y-2 flex">
+                  {leadScoreOptions.map(score => (
+                    <div key={score} className="flex items-center space-x-2 mr-10">
+                      <Checkbox
+                        id={`score-${score}`}
+                        checked={filters.leadScore?.includes(score) || false}
+                        onCheckedChange={(checked) => {
+                          const currentScores = filters.leadScore || [];
+                          const newScores = checked
+                            ? [...currentScores, score]
+                            : currentScores.filter(s => s !== score);
+                          updateFilters({ leadScore: newScores });
+                        }}
+                      />
+                      <Label htmlFor={`score-${score}`} className="text-sm">
+                        {score} Priority
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
           </div>
         </div>
 

@@ -13,6 +13,8 @@ import { CalendarEvent } from '@/types/communication';
 import { Lead } from '@/types/lead';
 import { GoogleCalendarService } from '@/lib/googleCalendar';
 import { Calendar, Clock, Users, Bell, MapPin, AlertCircle, CheckCircle2 } from 'lucide-react';
+// Import the useNotifications hook
+import { useNotifications } from '@/hooks/useNotifications';
 
 interface CalendarEventModalProps {
   open: boolean;
@@ -23,13 +25,13 @@ interface CalendarEventModalProps {
   onEventUpdated?: (event: CalendarEvent) => void;
 }
 
-export function CalendarEventModal({ 
-  open, 
-  onOpenChange, 
-  lead, 
-  event, 
-  onEventCreated, 
-  onEventUpdated 
+export function CalendarEventModal({
+  open,
+  onOpenChange,
+  lead,
+  event,
+  onEventCreated,
+  onEventUpdated,
 }: CalendarEventModalProps) {
   const [formData, setFormData] = useState({
     title: '',
@@ -47,19 +49,21 @@ export function CalendarEventModal({
   const [errorMessage, setErrorMessage] = useState('');
 
   const calendarService = GoogleCalendarService.getInstance();
+  // Initialize the useNotifications hook
+  const { createNotification } = useNotifications();
 
   useEffect(() => {
     if (event) {
       const startDate = new Date(event.startDateTime);
       const endDate = new Date(event.endDateTime);
-      
+
       setFormData({
         title: event.title,
         description: event.description || '',
         date: startDate.toISOString().split('T')[0],
         startTime: startDate.toTimeString().slice(0, 5),
         endTime: endDate.toTimeString().slice(0, 5),
-        location: '',
+        location: '', // Assuming location is not directly in CalendarEvent type, might need adjustment
         attendees: event.attendees || [],
         reminders: event.reminders || [10],
       });
@@ -67,7 +71,7 @@ export function CalendarEventModal({
       setFormData(prev => ({
         ...prev,
         title: `Follow-up with ${lead.name}`,
-        attendees: [lead.primaryEmail],
+        attendees: [lead.primaryEmail].filter(Boolean) as string[], // Ensure primaryEmail is not null/undefined
       }));
     }
   }, [event, lead]);
@@ -82,10 +86,10 @@ export function CalendarEventModal({
     try {
       setConnectionStatus('checking');
       setErrorMessage('');
-      
+
       await calendarService.initializeGoogleAPI();
       const hasPermissions = await calendarService.checkPermissions();
-      
+
       if (hasPermissions) {
         setIsGoogleConnected(true);
         setConnectionStatus('connected');
@@ -98,6 +102,12 @@ export function CalendarEventModal({
       setIsGoogleConnected(false);
       setConnectionStatus('error');
       setErrorMessage('Failed to initialize Google Calendar. Please check your internet connection.');
+      createNotification({
+        title: 'Google Calendar Connection Error',
+        message: 'Failed to initialize Google Calendar. Please check your internet connection.',
+        type: 'system_alert',
+        priority: 'high',
+      });
     }
   };
 
@@ -105,18 +115,36 @@ export function CalendarEventModal({
     try {
       setIsLoading(true);
       setErrorMessage('');
-      
+
       const success = await calendarService.signIn();
-      
+
       if (success) {
         setIsGoogleConnected(true);
         setConnectionStatus('connected');
+        createNotification({
+          title: 'Google Calendar Connected',
+          message: 'You are now connected to Google Calendar. You can create and sync events.',
+          type: 'system_alert',
+          priority: 'low',
+        });
       } else {
         setErrorMessage('Failed to connect to Google Calendar. Please try again.');
+        createNotification({
+          title: 'Google Calendar Connection Failed',
+          message: 'Failed to connect to Google Calendar. Please try again.',
+          type: 'system_alert',
+          priority: 'high',
+        });
       }
     } catch (error) {
       console.error('Failed to connect to Google Calendar:', error);
       setErrorMessage('Failed to connect to Google Calendar. Please ensure you grant the necessary permissions.');
+      createNotification({
+        title: 'Google Calendar Connection Error',
+        message: 'Failed to connect to Google Calendar. Please ensure you grant the necessary permissions.',
+        type: 'system_alert',
+        priority: 'high',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -124,20 +152,31 @@ export function CalendarEventModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!isGoogleConnected) {
+      // Attempt to connect if not already
       await handleGoogleConnect();
-      return;
+      // If still not connected, stop submission
+      if (!calendarService.isSignedIn()) {
+          setErrorMessage('You must connect to Google Calendar to save events.');
+          return;
+      }
     }
 
     if (!formData.title.trim() || !formData.date || !formData.startTime || !formData.endTime) {
       setErrorMessage('Please fill in all required fields.');
+      createNotification({
+        title: 'Missing Event Details',
+        message: 'Please fill in all required fields (Title, Date, Start Time, End Time).',
+        type: 'system_alert',
+        priority: 'medium',
+      });
       return;
     }
 
     setIsLoading(true);
     setErrorMessage('');
-    
+
     try {
       const startDateTime = new Date(`${formData.date}T${formData.startTime}`);
       const endDateTime = new Date(`${formData.date}T${formData.endTime}`);
@@ -145,6 +184,12 @@ export function CalendarEventModal({
       if (endDateTime <= startDateTime) {
         setErrorMessage('End time must be after start time.');
         setIsLoading(false);
+        createNotification({
+          title: 'Invalid Event Time',
+          message: 'End time must be after start time.',
+          type: 'system_alert',
+          priority: 'medium',
+        });
         return;
       }
 
@@ -171,14 +216,44 @@ export function CalendarEventModal({
       };
 
       let result;
-      if (event?.googleEventId) {
-        result = await calendarService.updateEvent(event.googleEventId, eventData);
+      const isUpdating = !!event?.googleEventId;
+
+      if (isUpdating) {
+        result = await calendarService.updateEvent(event.googleEventId!, eventData);
+        createNotification({
+          title: 'Calendar Event Updated',
+          message: `"${formData.title}" event has been updated in your Google Calendar.`,
+          type: 'calendar_event',
+          priority: 'medium',
+          actionUrl: `https://calendar.google.com/calendar/event?eid=${result.id}`, // Direct link to Google Calendar event
+          actionLabel: 'View in Google Calendar',
+        });
       } else {
         result = await calendarService.createEvent(eventData);
+        createNotification({
+          title: 'New Calendar Event Added',
+          message: `"${formData.title}" has been added to your Google Calendar.`,
+          type: 'calendar_event',
+          priority: 'medium',
+          actionUrl: `https://calendar.google.com/calendar/event?eid=${result.id}`, // Direct link to Google Calendar event
+          actionLabel: 'View in Google Calendar',
+        });
+      }
+
+      // Check if reminders were specifically set (beyond default use)
+      if (formData.reminders.length > 0) {
+        createNotification({
+          title: 'Event Reminders Configured',
+          message: `Reminders for "${formData.title}" event are set.`,
+          type: 'reminder',
+          priority: 'low', // Could be lower priority
+          actionUrl: `https://calendar.google.com/calendar/event?eid=${result.id}`,
+          actionLabel: 'View Reminders',
+        });
       }
 
       const newEvent: CalendarEvent = {
-        id: event?.id || `event-${Date.now()}`,
+        id: event?.id || `event-${Date.now()}`, // Assuming a local ID if no existing one
         title: formData.title,
         description: formData.description,
         startDateTime,
@@ -186,13 +261,13 @@ export function CalendarEventModal({
         attendees: formData.attendees,
         reminders: formData.reminders,
         leadId: lead?.id,
-        googleEventId: result.id,
-        createdBy: 'current-user',
+        googleEventId: result.id, // Store the Google Event ID
+        createdBy: 'current-user', // Replace with actual user ID
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      if (event) {
+      if (isUpdating) {
         onEventUpdated?.(newEvent);
       } else {
         onEventCreated?.(newEvent);
@@ -200,9 +275,16 @@ export function CalendarEventModal({
 
       onOpenChange(false);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create/update event:', error);
-      setErrorMessage('Failed to save event to Google Calendar. Please try again.');
+      const errorMessageText = error.message || 'Failed to save event to Google Calendar. Please try again.';
+      setErrorMessage(errorMessageText);
+      createNotification({
+        title: 'Calendar Event Save Failed',
+        message: `Failed to save "${formData.title}". ${errorMessageText}`,
+        type: 'system_alert',
+        priority: 'high',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -244,7 +326,7 @@ export function CalendarEventModal({
       ...prev,
       reminders: prev.reminders.includes(minutes)
         ? prev.reminders.filter(r => r !== minutes)
-        : [...prev.reminders, minutes],
+        : [...prev.reminders, minutes].sort((a,b) => a - b), // Keep sorted
     }));
   };
 

@@ -1,22 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
+// import jwt from 'jsonwebtoken';
 import { NotificationsAPI } from '@/lib/api/notifications';
+import { verifyAuth } from '@/lib/auth/server-utils'; // <--- NEW IMPORT
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+// const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Verify user authentication
-function verifyAuth(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
+// function verifyAuth(request: NextRequest) {
+//   const authHeader = request.headers.get('authorization');
   
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Authentication required');
-  }
+//   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+//     throw new Error('Authentication required');
+//   }
 
-  const token = authHeader.substring(7);
-  const decoded = jwt.verify(token, JWT_SECRET) as any;
+//   const token = authHeader.substring(7);
+//   const decoded = jwt.verify(token, JWT_SECRET) as any;
   
-  return decoded;
-}
+//   return decoded;
+// }
 
 export async function PUT(request: NextRequest) {
   try {

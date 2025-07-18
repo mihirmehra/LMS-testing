@@ -30,6 +30,7 @@ interface LeadProfileProps {
 export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadProfileProps) {
 
   type StatusType = "New" | "Contacted" | "Qualified" | "Nurturing" | "Site Visit Scheduled" | "Site Visited" | "Negotiation" | "Converted" | "Lost" | "Hold";
+  type ScoreType = "High" | "Medium" | "Low" ; 
 
   const { user } = useAuth();
   const permissionService = PermissionService.getInstance();
@@ -38,6 +39,7 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
 
   const [newNote, setNewNote] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<StatusType>(lead.status as StatusType);
+  const [selectedScore, setSelectedScore] = useState<ScoreType>(lead.leadScore as ScoreType);
   const [selectedAgent, setSelectedAgent] = useState(lead.assignedAgent || 'unassigned');
   // Initialize communicationActivities from lead's activities that are communication-related
   const [communicationActivities, setCommunicationActivities] = useState<CommunicationActivity[]>([]);
@@ -118,13 +120,14 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
     const updatedLead = {
       ...lead,
       status: selectedStatus as Lead['status'],
+      leadScore: selectedScore as Lead['leadScore'],
       assignedAgent: selectedAgent === 'unassigned' ? undefined : selectedAgent,
       updatedAt: new Date(),
     };
     await onUpdateLead(updatedLead);
     toast.success("Lead changes saved!");
     await onLeadRefresh();
-  }, [lead, selectedStatus, selectedAgent, canEditLead, onUpdateLead, onLeadRefresh]);
+  }, [lead, selectedStatus, selectedScore, selectedAgent, canEditLead, onUpdateLead, onLeadRefresh]);
 
   const handleAddNote = useCallback(async () => {
     if (!newNote.trim() || !canEditLead) {
@@ -379,7 +382,9 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
                 </div>
                 <div className="md:col-span-2">
                   <div className="text-sm font-medium text-gray-500">Preferred Locations</div>
-                  <div className="text-base font-medium">{lead.preferredLocations.join(', ')}</div>
+                  <div className="text-base font-medium">
+                    {lead.preferredLocations && Array.isArray(lead.preferredLocations) && lead.preferredLocations.length > 0 ? lead.preferredLocations.join(', ') : 'N/A'} {/* Or an empty string '' if you prefer nothing */}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -402,13 +407,27 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {['New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled',
+                        {['New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled', 'RNR', 'Busy', 'Disconnected', 'Not Interested', 'Not Interested (project)', 'Low Potential',
                           'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'].map(status => (
                             <SelectItem key={status} value={status}>{status}</SelectItem>
                           ))}
                       </SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-500 mb-2">Lead Score</div>
+                    <Select value={selectedScore} onValueChange={(value: ScoreType) => setSelectedScore(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select score" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['High', 'Medium', 'Low'].map(leadScore => (
+                            <SelectItem key={leadScore} value={leadScore}>{leadScore}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {canAssignLeads && (
                     <div>
                       <div className="text-sm font-medium text-gray-500 mb-2">Assigned Agent</div>

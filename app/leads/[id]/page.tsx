@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { Lead } from '@/types/lead'; // Ensure your Lead type is correctly defined here
 import { Skeleton } from '@/components/ui/skeleton'; // Assuming you have a skeleton component for loading state
 import { Button } from '@/components/ui/button'; // Assuming you have a button component
-import { toast } from 'sonner'; // For toasts/notifications
+import { toast } from 'sonner'; // Using sonner for toasts/notifications
 
 interface LeadDetailPageProps {
   params: {
@@ -35,6 +35,18 @@ export default function LeadDetailPage({ params }: LeadDetailPageProps) {
         throw new Error(`Failed to fetch lead: ${response.statusText}`);
       }
       const data: Lead = await response.json();
+      // Convert date strings back to Date objects if your API returns strings
+      if (data.createdAt) data.createdAt = new Date(data.createdAt);
+      if (data.updatedAt) data.updatedAt = new Date(data.updatedAt);
+      if (data.lastContacted) data.lastContacted = new Date(data.lastContacted);
+      data.activities = data.activities?.map(activity => ({
+        ...activity,
+        date: new Date(activity.date)
+      })) || [];
+
+      // Ensure preferredLocations is an array
+      data.preferredLocations = Array.isArray(data.preferredLocations) ? data.preferredLocations : [];
+
       setLead(data);
     } catch (error) {
       console.error('Error fetching lead:', error);
@@ -47,6 +59,9 @@ export default function LeadDetailPage({ params }: LeadDetailPageProps) {
 
   // Function to update lead details via your API route
   const handleUpdateLead = async (updatedLead: Lead) => {
+    // Store the current lead state before the update
+    const oldLead = lead; 
+
     try {
       // Calls your new API route at /api/leads/[id] with a PUT request
       const response = await fetch(`/api/leads/${updatedLead.id}`, {
@@ -61,16 +76,87 @@ export default function LeadDetailPage({ params }: LeadDetailPageProps) {
         throw new Error(`Failed to update lead: ${response.statusText}`);
       }
       const data: Lead = await response.json();
+      // Ensure dates are correctly parsed after update as well
+      if (data.createdAt) data.createdAt = new Date(data.createdAt);
+      if (data.updatedAt) data.updatedAt = new Date(data.updatedAt);
+      if (data.lastContacted) data.lastContacted = new Date(data.lastContacted);
+      data.activities = data.activities?.map(activity => ({
+        ...activity,
+        date: new Date(activity.date)
+      })) || [];
+
+      // Ensure preferredLocations is an array
+      data.preferredLocations = Array.isArray(data.preferredLocations) ? data.preferredLocations : [];
+
       setLead(data); // Update local state with the latest data from the server
       toast.success('Lead updated successfully!');
-      // No need for onLeadRefresh() here if the API returns the updated lead and you set it
-      // However, if your API updates async or other parts of lead might change,
-      // you could still call fetchLead() here for complete re-sync.
+
+      // --- Activity Logging for Lead Update ---
+      if (oldLead) {
+        let changes: string[] = [];
+        
+        // Compare individual fields for changes
+        if (oldLead.name !== data.name) changes.push(`Name from "${oldLead.name}" to "${data.name}"`);
+        if (oldLead.primaryPhone !== data.primaryPhone) changes.push(`Primary Phone from "${oldLead.primaryPhone}" to "${data.primaryPhone}"`);
+        if (oldLead.secondaryPhone !== data.secondaryPhone) changes.push(`Secondary Phone from "${oldLead.secondaryPhone || 'N/A'}" to "${data.secondaryPhone || 'N/A'}"`);
+        if (oldLead.primaryEmail !== data.primaryEmail) changes.push(`Primary Email from "${oldLead.primaryEmail}" to "${data.primaryEmail}"`);
+        if (oldLead.secondaryEmail !== data.secondaryEmail) changes.push(`Secondary Email from "${oldLead.secondaryEmail || 'N/A'}" to "${data.secondaryEmail || 'N/A'}"`);
+        if (oldLead.propertyType !== data.propertyType) changes.push(`Property Type from "${oldLead.propertyType}" to "${data.propertyType}"`);
+        if (oldLead.budgetRange !== data.budgetRange) changes.push(`Budget Range from "${oldLead.budgetRange}" to "${data.budgetRange}"`);
+        
+        // For arrays like preferredLocations, compare their stringified versions or content
+        // Safely ensure preferredLocations are arrays before sorting for comparison
+        const oldPreferredLocations = Array.isArray(oldLead.preferredLocations) ? oldLead.preferredLocations.sort() : [];
+        const newPreferredLocations = Array.isArray(data.preferredLocations) ? data.preferredLocations.sort() : [];
+
+        if (JSON.stringify(oldPreferredLocations) !== JSON.stringify(newPreferredLocations)) {
+          changes.push(`Preferred Locations from "[${oldPreferredLocations.join(', ')}]" to "[${newPreferredLocations.join(', ')}]"`);
+        }
+        
+        if (oldLead.source !== data.source) changes.push(`Source from "${oldLead.source}" to "${data.source}"`);
+        if (oldLead.status !== data.status) changes.push(`Status from "${oldLead.status}" to "${data.status}"`);
+        if (oldLead.assignedAgent !== data.assignedAgent) changes.push(`Assigned Agent from "${oldLead.assignedAgent || 'Unassigned'}" to "${data.assignedAgent || 'Unassigned'}"`);
+        if (oldLead.notes !== data.notes) changes.push(`Notes updated`); // Detail changes if necessary, or just note update
+        if (oldLead.leadScore !== data.leadScore) changes.push(`Lead Score from "${oldLead.leadScore}" to "${data.leadScore}"`);
+        if (oldLead.leadType !== data.leadType) changes.push(`Lead Type from "${oldLead.leadType}" to "${data.leadType}"`);
+
+        let activityMessage = 'Lead updated.';
+        if (changes.length > 0) {
+          activityMessage = `Lead details updated: ${changes.join('; ')}.`;
+        }
+
+        const activity = {
+          type: 'Status Change', // Using 'Status Change' or create a specific 'Lead Update' type
+          description: activityMessage,
+          date: new Date().toISOString(), // Ensure date is ISO string
+          agent: 'System' // Or actual agent name if you have it from auth context
+        };
+
+        try {
+          const activityResponse = await fetch(`/api/leads/${updatedLead.id}/activities`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+            },
+            body: JSON.stringify(activity),
+          });
+
+          if (!activityResponse.ok) {
+            console.error('Failed to log activity:', await activityResponse.text());
+          } else {
+            // Optionally re-fetch lead to show new activity immediately
+            fetchLead(); 
+          }
+        } catch (activityError) {
+          console.error('Error sending activity:', activityError);
+        }
+      }
+      // --- End Activity Logging ---
+
     } catch (error) {
       console.error('Error updating lead:', error);
       toast.error('Failed to update lead.');
-      // Consider re-fetching the lead to revert to server state if update fails badly
-      // fetchLead();
     }
   };
 

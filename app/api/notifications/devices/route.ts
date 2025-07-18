@@ -1,53 +1,53 @@
+// app/api/notifications/devices/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-// In-memory storage for demo (use database in production)
-let deviceRegistrations: any[] = [];
-
-// Verify user authentication
-function verifyAuth(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Authentication required');
-  }
-
-  const token = authHeader.substring(7);
-  const decoded = jwt.verify(token, JWT_SECRET) as any;
-  
-  return decoded;
-}
+import { verifyAuth } from '@/lib/auth/server-utils'; // Centralized auth
+import { 
+  getDeviceRegistrations, 
+  addDeviceRegistration, 
+  updateDeviceRegistration, 
+  findDeviceByEndpoint 
+} from '@/lib/dev-db/push-devices'; // Persistent mock DB
+import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 
 export async function GET(request: NextRequest) {
   try {
-    const decoded = verifyAuth(request);
+    const decoded = verifyAuth(request); // Authentication check
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    
+    const userId = searchParams.get('userId'); // This userId *should* match decoded.userId for security
+
     if (!userId) {
       return NextResponse.json(
         { message: 'User ID is required' },
         { status: 400 }
       );
     }
+
+    // Security check: ensure requested userId matches authenticated user
+    if (userId !== decoded.userId) {
+      return NextResponse.json(
+        { message: 'Unauthorized: User ID mismatch' },
+        { status: 403 }
+      );
+    }
     
-    // Filter devices for the specific user
-    const userDevices = deviceRegistrations.filter(device => device.userId === userId);
+    // Filter devices for the specific user from persistent mock DB
+    const userDevices = getDeviceRegistrations().filter(device => device.userId === userId);
     
     return NextResponse.json(userDevices);
   } catch (error) {
     console.error('Get devices error:', error);
     
     if (error instanceof Error) {
-      if (error.message.includes('Authentication required')) {
+      if (error.message.includes('Authentication required') || error.message.includes('Invalid or expired token')) {
         return NextResponse.json({ message: error.message }, { status: 401 });
+      }
+      if (error.message.includes('Unauthorized: User ID mismatch')) {
+        return NextResponse.json({ message: error.message }, { status: 403 });
       }
     }
     
     return NextResponse.json(
-      { message: 'Failed to fetch devices' },
+      { message: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -55,50 +55,64 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const decoded = verifyAuth(request);
+    const decoded = verifyAuth(request); // Authentication check
     const deviceData = await request.json();
     
     // Validate device data
-    if (!deviceData.userId || !deviceData.deviceName || !deviceData.pushSubscription) {
+    if (!deviceData.userId || !deviceData.deviceName || !deviceData.pushSubscription || !deviceData.deviceType) {
       return NextResponse.json(
-        { message: 'Missing required device information' },
+        { message: 'Missing required device information (userId, deviceName, pushSubscription, deviceType)' },
         { status: 400 }
       );
     }
+
+    // Security check: ensure posted userId matches authenticated user
+    if (deviceData.userId !== decoded.userId) {
+        return NextResponse.json(
+            { message: 'Unauthorized: User ID mismatch in payload' },
+            { status: 403 }
+        );
+    }
     
-    // Check if device already exists
-    const existingDevice = deviceRegistrations.find(
-      device => device.pushSubscription.endpoint === deviceData.pushSubscription.endpoint
-    );
+    // Check if device already exists by endpoint (endpoint is unique per subscription)
+    const existingDevice = findDeviceByEndpoint(deviceData.pushSubscription.endpoint);
     
     if (existingDevice) {
       // Update existing device
       existingDevice.lastUsed = new Date();
       existingDevice.isActive = true;
+      existingDevice.deviceName = deviceData.deviceName; // Allow updating name
+      existingDevice.deviceType = deviceData.deviceType; // Allow updating type
+      updateDeviceRegistration(existingDevice); // Persist update
       return NextResponse.json(existingDevice);
     }
     
     // Add new device
     const newDevice = {
+      id: uuidv4(), // Generate unique ID for the device
       ...deviceData,
       registeredAt: new Date(),
       lastUsed: new Date(),
+      isActive: true, // Mark as active when registered
     };
     
-    deviceRegistrations.push(newDevice);
+    addDeviceRegistration(newDevice); // Persist new device
     
     return NextResponse.json(newDevice, { status: 201 });
   } catch (error) {
     console.error('Register device error:', error);
     
     if (error instanceof Error) {
-      if (error.message.includes('Authentication required')) {
+      if (error.message.includes('Authentication required') || error.message.includes('Invalid or expired token')) {
         return NextResponse.json({ message: error.message }, { status: 401 });
+      }
+      if (error.message.includes('Unauthorized: User ID mismatch')) {
+        return NextResponse.json({ message: error.message }, { status: 403 });
       }
     }
     
     return NextResponse.json(
-      { message: 'Failed to register device' },
+      { message: 'Internal server error' },
       { status: 500 }
     );
   }

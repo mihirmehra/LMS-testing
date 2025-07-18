@@ -163,7 +163,7 @@ export function LeadListItem({ lead, onViewDetails, onEditLead, onStatusChange }
         <div className="hidden lg:flex flex-col space-y-1 col-span-1 text-sm text-gray-600">
           <div className="flex items-center space-x-1 truncate">
             <MapPin className="h-3 w-3 text-gray-400 flex-shrink-0" />
-            <span className="truncate">{lead.preferredLocations.join(', ')}</span>
+            <span className="truncate">{lead.preferredLocations && Array.isArray(lead.preferredLocations) && lead.preferredLocations.length > 0 ? lead.preferredLocations.join(', ') : 'N/A'} {/* Or an empty string '' if you prefer nothing */}</span>
           </div>
           <div className="flex items-center space-x-1 truncate">
             <DollarSign className="h-3 w-3 text-gray-400 flex-shrink-0" />

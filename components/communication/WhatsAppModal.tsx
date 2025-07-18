@@ -196,7 +196,7 @@ export function WhatsAppModal({ open, onOpenChange, lead, onMessageSent }: Whats
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Locations:</span>
-                  <span className="font-medium text-sm">{lead.preferredLocations.join(', ')}</span>
+                  <span className="font-medium text-sm">{lead.preferredLocations && Array.isArray(lead.preferredLocations) && lead.preferredLocations.length > 0 ? lead.preferredLocations.join(', ') : 'N/A'} {/* Or an empty string '' if you prefer nothing */}</span>
                 </div>
               </CardContent>
             </Card>
