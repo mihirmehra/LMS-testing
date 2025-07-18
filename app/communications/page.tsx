@@ -1,6 +1,8 @@
+// project/app/communications/page.tsx
+
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,92 +14,125 @@ import { useAuth } from '@/hooks/useAuth';
 import { PermissionService } from '@/lib/permissions';
 import { MessageCircle, Calendar, Mail, Phone, Send, Users, Clock } from 'lucide-react';
 
+// Define the shape of communication stats for clarity
+interface CommunicationStats {
+  totalMessages: number;
+  scheduledEvents: number;
+  emailsSent: number;
+  callsMade: number;
+}
+
+// Define the shape of recent activities for clarity
+interface RecentActivity {
+  id: string;
+  type: 'whatsapp' | 'calendar' | 'email' | 'call';
+  message: string;
+  timestamp: Date;
+  leadName?: string;
+}
+
 export default function CommunicationsPage() {
-  const { user } = useAuth();
+  const { user } = useAuth(); // Get the logged-in user (including user.id and user.role)
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  
+  // States for fetched data and loading/error
+  const [communicationStats, setCommunicationStats] = useState<CommunicationStats>({
+    totalMessages: 0,
+    scheduledEvents: 0,
+    emailsSent: 0,
+    callsMade: 0,
+  });
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [errorStats, setErrorStats] = useState<string | null>(null);
+
+  const [loadingActivities, setLoadingActivities] = useState(true);
+  const [errorActivities, setErrorActivities] = useState<string | null>(null);
 
   const permissionService = PermissionService.getInstance();
 
-  const communicationStats = {
-    totalMessages: 156,
-    scheduledEvents: 23,
-    emailsSent: 89,
-    callsMade: 67,
-  };
+  // Fetch communication stats on component mount, dependent on user.id and user.role
+  useEffect(() => {
+    const fetchStats = async () => {
+      // Ensure user object and its properties are available before fetching
+      if (!user?.id || !user?.role) { 
+        setLoadingStats(false);
+        return;
+      }
 
-  const recentActivities = [
-    {
-      id: '1',
-      type: 'whatsapp',
-      message: 'Property details shared with John Williams',
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      leadName: 'John Williams',
-    },
-    {
-      id: '2',
-      type: 'calendar',
-      message: 'Site visit scheduled with Maria Garcia',
-      timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000),
-      leadName: 'Maria Garcia',
-    },
-    {
-      id: '3',
-      type: 'email',
-      message: 'Follow-up email sent to Robert Kim',
-      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000),
-      leadName: 'Robert Kim',
-    },
-  ];
+      setLoadingStats(true);
+      setErrorStats(null);
 
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'whatsapp':
-        return <MessageCircle className="h-4 w-4 text-green-600" />;
-      case 'calendar':
-        return <Calendar className="h-4 w-4 text-blue-600" />;
-      case 'email':
-        return <Mail className="h-4 w-4 text-purple-600" />;
-      case 'call':
-        return <Phone className="h-4 w-4 text-orange-600" />;
-      default:
-        return <MessageCircle className="h-4 w-4 text-gray-600" />;
-    }
-  };
+      // Construct query URL based on user role
+      let queryUrl = `/api/communications/stats?userId=${user.id}&userRole=${user.role}`;
 
-  const formatTimestamp = (timestamp: Date) => {
-    return new Intl.DateTimeFormat('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      month: 'short',
-      day: 'numeric',
-    }).format(timestamp);
-  };
+      try {
+        const response = await fetch(queryUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const stats: CommunicationStats = await response.json();
+        setCommunicationStats(stats);
+      } catch (error: any) {
+        console.error('Failed to fetch communication stats:', error);
+        setErrorStats(error.message);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchStats();
+  }, [user?.id, user?.role]); // Re-run when user.id or user.role changes
+
+  // Fetch all recent activities on component mount, dependent on user.id and user.role
+  useEffect(() => {
+    const fetchRecentActivities = async () => {
+      // Ensure user object and its properties are available before fetching
+      if (!user?.id || !user?.role) { 
+        setLoadingActivities(false);
+        return;
+      }
+
+      setLoadingActivities(true);
+      setErrorActivities(null);
+
+      // Construct query URL based on user role
+      let queryUrl = `/api/communications/all-activities?userId=${user.id}&userRole=${user.role}`;
+
+      try {
+        const response = await fetch(queryUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const activities: RecentActivity[] = await response.json();
+        setRecentActivities(activities);
+      } catch (error: any) {
+        console.error('Failed to fetch recent activities:', error);
+        setErrorActivities(error.message);
+      } finally {
+        setLoadingActivities(false);
+      }
+    };
+
+    fetchRecentActivities();
+  }, [user?.id, user?.role]); // Re-run when user.id or user.role changes
 
   return (
-    <ProtectedRoute requiredPermission={{ resource: 'communications', action: 'read' }}>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Communications</h1>
-            <p className="text-gray-600 mt-1">Manage all your lead communications in one place</p>
-          </div>
-          <div className="flex space-x-3">
+    <ProtectedRoute>
+      <div className="flex-1 space-y-8 p-8 pt-6">
+        <div className="flex items-center justify-between space-y-2">
+          <h2 className="text-3xl font-bold tracking-tight">Communications Overview</h2>
+          <div className="flex items-center space-x-2">
             {permissionService.hasPermission(user, 'calendar', 'create') && (
-              <Button
-                onClick={() => setIsCalendarModalOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
+              <Button onClick={() => setIsCalendarModalOpen(true)}>
                 <Calendar className="h-4 w-4 mr-2" />
                 Schedule Event
               </Button>
             )}
             {permissionService.hasPermission(user, 'communications', 'create') && (
-              <Button
-                onClick={() => setIsWhatsAppModalOpen(true)}
-                className="bg-green-600 hover:bg-green-700"
-              >
+              <Button onClick={() => setIsWhatsAppModalOpen(true)}>
                 <MessageCircle className="h-4 w-4 mr-2" />
                 Send WhatsApp
               </Button>
@@ -105,182 +140,120 @@ export default function CommunicationsPage() {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="border-0 shadow-md">
+        {/* Communication Stats */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Messages
-              </CardTitle>
-              <Send className="h-4 w-4 text-blue-600" />
+              <CardTitle className="text-sm font-medium">Total Messages</CardTitle>
+              <MessageCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{communicationStats.totalMessages}</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-green-600">+12</span> from last week
-              </p>
+              <div className="text-2xl font-bold">
+                {loadingStats ? 'Loading...' : communicationStats.totalMessages}
+              </div>
+              {errorStats && <p className="text-xs text-red-500">Error: {errorStats}</p>}
+              {!loadingStats && !errorStats && <p className="text-xs text-muted-foreground">(Live data)</p>}
             </CardContent>
           </Card>
-
-          <Card className="border-0 shadow-md">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Scheduled Events
-              </CardTitle>
-              <Calendar className="h-4 w-4 text-green-600" />
+              <CardTitle className="text-sm font-medium">Scheduled Events</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{communicationStats.scheduledEvents}</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-green-600">+5</span> this week
-              </p>
+              <div className="text-2xl font-bold">
+                {loadingStats ? 'Loading...' : communicationStats.scheduledEvents}
+              </div>
+              {errorStats && <p className="text-xs text-red-500">Error: {errorStats}</p>}
+              {!loadingStats && !errorStats && <p className="text-xs text-muted-foreground">(Live data)</p>}
             </CardContent>
           </Card>
-
-          <Card className="border-0 shadow-md">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Emails Sent
-              </CardTitle>
-              <Mail className="h-4 w-4 text-purple-600" />
+              <CardTitle className="text-sm font-medium">Emails Sent</CardTitle>
+              <Mail className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{communicationStats.emailsSent}</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-green-600">+8</span> from last week
-              </p>
+              <div className="text-2xl font-bold">
+                {loadingStats ? 'Loading...' : communicationStats.emailsSent}
+              </div>
+              {errorStats && <p className="text-xs text-red-500">Error: {errorStats}</p>}
+              {!loadingStats && !errorStats && <p className="text-xs text-muted-foreground">(Live data)</p>}
             </CardContent>
           </Card>
-
-          <Card className="border-0 shadow-md">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Calls Made
-              </CardTitle>
-              <Phone className="h-4 w-4 text-orange-600" />
+              <CardTitle className="text-sm font-medium">Calls Made</CardTitle>
+              <Phone className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{communicationStats.callsMade}</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-green-600">+3</span> from last week
-              </p>
+              <div className="text-2xl font-bold">
+                {loadingStats ? 'Loading...' : communicationStats.callsMade}
+              </div>
+              {errorStats && <p className="text-xs text-red-500">Error: {errorStats}</p>}
+              {!loadingStats && !errorStats && <p className="text-xs text-muted-foreground">(Live data)</p>}
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Content */}
-        <Tabs defaultValue="recent" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="recent">Recent Activity</TabsTrigger>
-            <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-            <TabsTrigger value="calendar">Calendar</TabsTrigger>
+        {/* Recent Activities */}
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="recent" className="space-y-4">
-            <Card className="border-0 shadow-md">
+          <TabsContent value="overview" className="space-y-4">
+            <Card className="col-span-4">
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Clock className="h-5 w-5 text-blue-600" />
-                  <span>Recent Communication Activity</span>
-                </CardTitle>
+                <CardTitle>Recent Activities</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingActivities ? (
+                  <p className="text-center text-gray-500 py-6">Loading activities...</p>
+                ) : errorActivities ? (
+                  <p className="text-center text-red-500 py-6">Error loading activities: {errorActivities}</p>
+                ) : recentActivities.length > 0 ? (
+                  <div className="space-y-4">
+                    {recentActivities.map((activity) => (
+                      <div key={activity.id} className="flex items-start space-x-3">
+                        <div className="mt-1">
+                          {activity.type === 'whatsapp' && (
+                            <MessageCircle className="h-5 w-5 text-green-500" />
+                          )}
+                          {activity.type === 'calendar' && (
+                            <Calendar className="h-5 w-5 text-blue-500" />
+                          )}
+                          {activity.type === 'email' && (
+                            <Mail className="h-5 w-5 text-purple-500" />
+                          )}
+                          {activity.type === 'call' && (
+                            <Phone className="h-5 w-5 text-orange-500" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{activity.message}</p>
+                          <p className="text-xs text-gray-500">
+                            {activity.leadName && `Lead: ${activity.leadName} - `}
+                            {new Date(activity.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500 py-6">No recent activities found for this user.</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="templates" className="space-y-4">
+            <Card className="col-span-4">
+              <CardHeader>
+                <CardTitle>Communication Templates</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {recentActivities.map((activity) => (
-                    <div key={activity.id} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
-                      <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
-                        {getActivityIcon(activity.type)}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{activity.message}</p>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <Badge variant="outline" className="text-xs">
-                            {activity.leadName}
-                          </Badge>
-                          <span className="text-xs text-gray-500">
-                            {formatTimestamp(activity.timestamp)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="whatsapp" className="space-y-4">
-            <Card className="border-0 shadow-md">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <MessageCircle className="h-5 w-5 text-green-600" />
-                  <span>WhatsApp Communications</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">WhatsApp Integration</h3>
-                  <p className="text-gray-600 mb-6">
-                    Send personalized messages to your leads directly through WhatsApp
-                  </p>
-                  {permissionService.hasPermission(user, 'communications', 'create') && (
-                    <Button
-                      onClick={() => setIsWhatsAppModalOpen(true)}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <MessageCircle className="h-4 w-4 mr-2" />
-                      Send WhatsApp Message
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="calendar" className="space-y-4">
-            <Card className="border-0 shadow-md">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Calendar className="h-5 w-5 text-blue-600" />
-                  <span>Calendar Events</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Calendar className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Google Calendar Integration</h3>
-                  <p className="text-gray-600 mb-6">
-                    Schedule meetings and site visits that sync with your Google Calendar
-                  </p>
-                  {permissionService.hasPermission(user, 'calendar', 'create') && (
-                    <Button
-                      onClick={() => setIsCalendarModalOpen(true)}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Schedule New Event
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="templates" className="space-y-4">
-            <Card className="border-0 shadow-md">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Users className="h-5 w-5 text-purple-600" />
-                  <span>Message Templates</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Users className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Communication Templates</h3>
-                  <p className="text-gray-600 mb-6">
+                  <p className="text-sm text-muted-foreground">
                     Create and manage reusable message templates for efficient communication
                   </p>
                   <Button variant="outline">
