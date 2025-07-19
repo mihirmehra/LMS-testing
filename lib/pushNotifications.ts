@@ -8,8 +8,10 @@ export interface PushSubscription {
   };
 }
 
+// UPDATED: Added mongoId as an optional field to reflect what the server returns
 export interface DeviceRegistration {
-  id: string;
+  id: string; // Your client-generated unique ID (e.g., 'device-1700000000')
+  mongoId?: string; // MongoDB's internal _id, returned by the server
   userId: string;
   deviceName: string;
   deviceType: 'mobile' | 'desktop' | 'tablet';
@@ -53,76 +55,60 @@ export class PushNotificationService {
   }
 
   async registerServiceWorker(): Promise<ServiceWorkerRegistration> {
-      if (!this.isSupported()) {
-        throw new Error('Service workers are not supported');
-      }
+    if (!this.isSupported()) {
+      throw new Error('Service workers are not supported');
+    }
 
-      console.log('registerServiceWorker: Starting checks...');
+    console.log('registerServiceWorker: Starting checks...');
 
-      // Get existing registration or register a new one
-      console.log('registerServiceWorker: Attempting to get existing registration...');
-      let registration = await navigator.serviceWorker.getRegistration('/sw.js'); // registration could be undefined here
-      
-      if (!registration) {
-        console.log('registerServiceWorker: No existing SW found. Registering new service worker...');
-        registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-        console.log('registerServiceWorker: New SW registration call completed.');
-      } else {
-        console.log('registerServiceWorker: Service Worker already registered:', registration);
-      }
+    // Get existing registration or register a new one
+    console.log('registerServiceWorker: Attempting to get existing registration...');
+    let registration = await navigator.serviceWorker.getRegistration('/sw.js');
 
-      // At this point, 'registration' is guaranteed to be a ServiceWorkerRegistration object.
-      // If 'navigator.serviceWorker.getRegistration' or 'navigator.serviceWorker.register'
-      // failed to return a registration, they would have thrown an error, preventing execution past here.
+    if (!registration) {
+      console.log('registerServiceWorker: No existing SW found. Registering new service worker...');
+      registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      console.log('registerServiceWorker: New SW registration call completed.');
+    } else {
+      console.log('registerServiceWorker: Service Worker already registered:', registration);
+    }
 
-      // Ensure the service worker is active and controlling the page
-      if (registration.active && navigator.serviceWorker.controller === registration.active) {
-          console.log('registerServiceWorker: SW is already active and controlling. Resolving directly.');
-          return registration;
-      } else {
-          console.log('registerServiceWorker: SW not yet active or not controlling. Setting up statechange listener...');
-          return new Promise((resolve) => {
-              const checkAndResolve = () => {
-                  // Use '!' to assert that registration is not null/undefined
-                  console.log(`registerServiceWorker: State change detected or immediate check. Current SW state: ${registration!.active?.state}, Controller: ${navigator.serviceWorker.controller ? 'present' : 'absent'}`);
-                  
-                  // Use '!' consistently inside the condition
-                  if (registration!.active && navigator.serviceWorker.controller === registration!.active) {
-                      console.log('registerServiceWorker: SW activated and now controlling. Resolving registration promise.');
-                      registration!.removeEventListener('statechange', checkAndResolve); // Use '!'
-                      resolve(registration!); // Use '!'
-                  } 
-                  // Add the reload logic back for robust first-time activation handling
-                  else if (registration!.active && !navigator.serviceWorker.controller) {
-                      console.warn('registerServiceWorker: SW activated, but not controlling. Reloading page to establish control...');
-                      window.location.reload(); 
-                      // Note: This reload means the promise won't resolve on *this* page load.
-                      // It will resolve immediately on the *reloaded* page when this function runs again.
-                  }
-              };
+    // At this point, 'registration' is guaranteed to be a ServiceWorkerRegistration object.
+    if (registration.active && navigator.serviceWorker.controller === registration.active) {
+      console.log('registerServiceWorker: SW is already active and controlling. Resolving directly.');
+      return registration;
+    } else {
+      console.log('registerServiceWorker: SW not yet active or not controlling. Setting up statechange listener...');
+      return new Promise((resolve) => {
+        const checkAndResolve = () => {
+          console.log(`registerServiceWorker: State change detected or immediate check. Current SW state: ${registration!.active?.state}, Controller: ${navigator.serviceWorker.controller ? 'present' : 'absent'}`);
 
-              // Attach listener for state changes
-              // The error was likely here for 'registration.addEventListener' without '!'
-              registration!.addEventListener('updatefound', () => { // Use '!'
-                  const newWorker = registration!.installing; // Use '!'
-                  if (newWorker) {
-                      newWorker.addEventListener('statechange', checkAndResolve);
-                  }
-              });
-              
-              // Also attach listener for 'statechange' directly on the registration for initial activation
-              // This is crucial if 'updatefound' doesn't fire immediately (e.g., on first install).
-              // This line was present in previous versions and is important.
-              registration!.addEventListener('statechange', checkAndResolve);
+          if (registration!.active && navigator.serviceWorker.controller === registration!.active) {
+            console.log('registerServiceWorker: SW activated and now controlling. Resolving registration promise.');
+            registration!.removeEventListener('statechange', checkAndResolve);
+            resolve(registration!);
+          }
+          else if (registration!.active && !navigator.serviceWorker.controller) {
+            console.warn('registerServiceWorker: SW activated, but not controlling. Reloading page to establish control...');
+            window.location.reload();
+          }
+        };
 
+        registration!.addEventListener('updatefound', () => {
+          const newWorker = registration!.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', checkAndResolve);
+          }
+        });
 
-              // Also check immediately in case it's already active but just not controlling
-              checkAndResolve();
-          });
-      }
+        registration!.addEventListener('statechange', checkAndResolve); // Crucial for initial activation
+
+        checkAndResolve(); // Also check immediately
+      });
+    }
   }
 
-  
+
   // Subscribe to push notifications
   async subscribeToPush(userId: string, deviceName: string): Promise<DeviceRegistration> {
     try {
@@ -137,7 +123,7 @@ export class PushNotificationService {
 
       // Register service worker
       const registration = await this.registerServiceWorker();
-      
+
       console.log('registration')
       console.log(registration)
 
@@ -158,7 +144,7 @@ export class PushNotificationService {
 
       // Create device registration object
       const deviceRegistration: DeviceRegistration = {
-        id: `device-${Date.now()}`,
+        id: `device-${Date.now()}`, // Client-generated ID (will be stored as 'id' in MongoDB)
         userId,
         deviceName: deviceName || `${deviceType} Device`,
         deviceType,
@@ -175,9 +161,9 @@ export class PushNotificationService {
       };
 
       // Save to server
-      await this.saveDeviceRegistration(deviceRegistration);
+      const savedDevice = await this.saveDeviceRegistration(deviceRegistration);
 
-      return deviceRegistration;
+      return savedDevice; // Return the device object including mongoId from the server response
     } catch (error) {
       console.error('Error subscribing to push notifications:', error);
       throw error;
@@ -294,7 +280,8 @@ export class PushNotificationService {
     return 'desktop';
   }
 
-  private async saveDeviceRegistration(device: DeviceRegistration): Promise<void> {
+  // UPDATED: Remove local storage fallback
+  private async saveDeviceRegistration(device: DeviceRegistration): Promise<DeviceRegistration> {
     try {
       const response = await fetch('/api/notifications/devices', {
         method: 'POST',
@@ -306,17 +293,22 @@ export class PushNotificationService {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save device registration');
+        // Attempt to parse error message from server if available
+        const errorData = await response.json().catch(() => ({ message: 'Unknown server error' }));
+        throw new Error(`Failed to save device registration: ${errorData.message || response.statusText}`);
       }
+      
+      // Return the saved device data from the server, which includes mongoId
+      return await response.json();
+
     } catch (error) {
       console.error('Error saving device registration:', error);
-      // Store locally as fallback
-      const devices = JSON.parse(localStorage.getItem('push_devices') || '[]');
-      devices.push(device);
-      localStorage.setItem('push_devices', JSON.stringify(devices));
+      // Re-throw the error to be handled by subscribeToPush
+      throw error;
     }
   }
 
+  // UPDATED: Remove local storage fallback
   private async removeDeviceRegistration(deviceId: string): Promise<void> {
     try {
       const response = await fetch(`/api/notifications/devices/${deviceId}`, {
@@ -327,14 +319,13 @@ export class PushNotificationService {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to remove device registration');
+        // Attempt to parse error message from server if available
+        const errorData = await response.json().catch(() => ({ message: 'Unknown server error' }));
+        throw new Error(`Failed to remove device registration: ${errorData.message || response.statusText}`);
       }
     } catch (error) {
       console.error('Error removing device registration:', error);
-      // Remove from local storage as fallback
-      const devices = JSON.parse(localStorage.getItem('push_devices') || '[]');
-      const updatedDevices = devices.filter((d: DeviceRegistration) => d.id !== deviceId);
-      localStorage.setItem('push_devices', JSON.stringify(updatedDevices));
+      throw error; // Re-throw the error
     }
   }
 }
