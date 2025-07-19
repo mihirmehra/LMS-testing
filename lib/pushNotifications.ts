@@ -21,7 +21,14 @@ export interface DeviceRegistration {
 
 export class PushNotificationService {
   private static instance: PushNotificationService;
-  private vapidPublicKey = 'BLOewXy_CrdUjxFlR_G1wwo2vItf3NgGs3ylT_9YKa7i1r54okXcK1v5C6Ns4SF-mlnRKbpptlxRRYGPcGgrD3I'; // Demo key
+  private vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+  constructor() {
+    if (!this.vapidPublicKey) {
+      console.error('Error: NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set!');
+      // You might want to throw an error or handle gracefully here
+    }
+  }
 
   static getInstance(): PushNotificationService {
     if (!PushNotificationService.instance) {
@@ -135,6 +142,9 @@ export class PushNotificationService {
       console.log(registration)
 
       // Subscribe to push notifications
+      if (!this.vapidPublicKey) {
+        throw new Error('VAPID public key is not set');
+      }
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: this.urlBase64ToUint8Array(this.vapidPublicKey),
