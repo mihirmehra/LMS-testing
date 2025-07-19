@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Notification } from '@/types/notification';
-import { useNotifications } from '@/hooks/useNotifications';
+import { Notification } from '@/types/notification'; // Ensure this path is correct
+import { useNotifications } from '@/hooks/useNotifications'; // Ensure this path is correct
 import { 
   Bell, 
   Calendar, 
@@ -17,7 +17,8 @@ import {
   User, 
   Settings,
   Check,
-  ExternalLink
+  ExternalLink,
+  Loader2 // Added for loading indicator
 } from 'lucide-react';
 
 interface NotificationCenterProps {
@@ -32,18 +33,32 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
     markAsRead, 
     markAllAsRead, 
     deleteNotification,
-    loading 
+    loading: notificationsLoading, // Renamed to avoid confusion with local 'loading' state if any
+    error: notificationsError, // Added error state from hook
+    fetchNotifications // Assuming your hook provides a way to refetch
   } = useNotifications();
   
   const [filter, setFilter] = useState<'all' | 'unread' | 'meetings' | 'tasks'>('all');
+
+  // Fetch notifications when the component mounts or when the center opens/closes if needed
+  // This assumes fetchNotifications is handled internally by useNotifications on mount,
+  // but if you need to re-fetch when opening the panel, uncomment the useEffect below.
+  // useEffect(() => {
+  //   if (open) {
+  //     fetchNotifications(); // Fetch latest notifications when the panel opens
+  //   }
+  // }, [open, fetchNotifications]);
+
 
   const filteredNotifications = notifications.filter(notification => {
     switch (filter) {
       case 'unread':
         return !notification.read;
       case 'meetings':
+        // Assuming your NotificationType includes these specific types
         return notification.type === 'meeting_reminder' || notification.type === 'calendar_event';
       case 'tasks':
+        // Assuming your NotificationType includes this specific type
         return notification.type === 'task_reminder';
       default:
         return true;
@@ -58,6 +73,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
       case 'task_reminder':
         return <Clock className="h-4 w-4 text-amber-600" />;
       case 'lead_update':
+      case 'lead_assignment': // Added lead_assignment
         return <User className="h-4 w-4 text-green-600" />;
       case 'system_alert':
         return <Settings className="h-4 w-4 text-red-600" />;
@@ -79,17 +95,25 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
     }
   };
 
-  const formatTime = (date: Date) => {
+  // Improved formatTime function for better readability and accuracy
+  const formatTime = (dateString: Date) => {
+    const date = new Date(dateString); // Ensure it's a Date object
     const now = new Date();
-    const diff = now.getTime() - new Date(date).getTime();
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const diffMs = now.getTime() - date.getTime();
 
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    return `${days}d ago`;
+    const seconds = Math.floor(diffMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    const months = Math.floor(days / 30); // Approximate months
+    const years = Math.floor(days / 365); // Approximate years
+
+    if (years > 0) return `${years}y ago`;
+    if (months > 0) return `${months}mo ago`;
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'Just now';
   };
 
   const handleNotificationClick = (notification: Notification) => {
@@ -99,20 +123,21 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
 
     // Navigate to related content if actionUrl exists
     if (notification.actionUrl) {
-      window.location.href = notification.actionUrl;
+      // Using window.location.assign or a router push would be better for SPAs
+      window.location.href = notification.actionUrl; 
     }
   };
 
-  if (!open) return null;
+  if (!open) return null; // Render nothing if not open
 
   return (
     <div className="fixed inset-0 z-50 bg-black/20" onClick={() => onOpenChange(false)}>
       <div 
         className="fixed right-0 top-0 h-full w-96 bg-white shadow-xl border-l border-gray-200 transform transition-transform duration-300 ease-in-out"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
       >
-        <Card className="h-full border-0 rounded-none">
-          <CardHeader className="border-b border-gray-200">
+        <Card className="h-full border-0 rounded-none flex flex-col"> {/* Added flex-col for layout */}
+          <CardHeader className="border-b border-gray-200 flex-shrink-0"> {/* flex-shrink-0 to keep header fixed */}
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center space-x-2">
                 <Bell className="h-5 w-5 text-blue-600" />
@@ -160,11 +185,21 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
             </div>
           </CardHeader>
 
-          <CardContent className="p-0">
-            <ScrollArea className="h-[calc(100vh-140px)]">
-              {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <CardContent className="p-0 flex-grow"> {/* flex-grow to take remaining space */}
+            <ScrollArea className="h-full"> {/* Make ScrollArea fill available height */}
+              {notificationsLoading ? (
+                <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                  <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                  <p>Loading notifications...</p>
+                </div>
+              ) : notificationsError ? (
+                <div className="flex flex-col items-center justify-center py-8 text-red-500 text-center px-4">
+                    <Settings className="h-12 w-12 mx-auto mb-4 text-red-300" />
+                    <h3 className="text-lg font-medium mb-2">Error loading notifications</h3>
+                    <p className="text-sm">{notificationsError}</p>
+                    <Button onClick={() => fetchNotifications()} variant="outline" className="mt-4">
+                        Retry
+                    </Button>
                 </div>
               ) : filteredNotifications.length > 0 ? (
                 <div className="divide-y divide-gray-100">
@@ -214,10 +249,11 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                                   variant="ghost"
                                   size="sm"
                                   onClick={(e) => {
-                                    e.stopPropagation();
+                                    e.stopPropagation(); // Prevent parent div's click
                                     markAsRead(notification.id);
                                   }}
                                   className="h-6 w-6 p-0 text-gray-400 hover:text-blue-600"
+                                  title="Mark as Read"
                                 >
                                   <CheckCircle2 className="h-3 w-3" />
                                 </Button>
@@ -227,10 +263,11 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                                 variant="ghost"
                                 size="sm"
                                 onClick={(e) => {
-                                  e.stopPropagation();
+                                  e.stopPropagation(); // Prevent parent div's click
                                   deleteNotification(notification.id);
                                 }}
                                 className="h-6 w-6 p-0 text-gray-400 hover:text-red-600"
+                                title="Delete Notification"
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
@@ -240,10 +277,11 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                                   variant="ghost"
                                   size="sm"
                                   onClick={(e) => {
-                                    e.stopPropagation();
+                                    e.stopPropagation(); // Prevent parent div's click
                                     window.location.href = notification.actionUrl!;
                                   }}
                                   className="h-6 w-6 p-0 text-gray-400 hover:text-blue-600"
+                                  title={notification.actionLabel || "View Details"}
                                 >
                                   <ExternalLink className="h-3 w-3" />
                                 </Button>
@@ -256,13 +294,13 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12">
+                <div className="text-center py-12 px-4">
                   <Bell className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications</h3>
                   <p className="text-gray-600">
                     {filter === 'unread' 
                       ? "You're all caught up! No unread notifications."
-                      : "You don't have any notifications yet."}
+                      : "You don't have any notifications matching this filter."}
                   </p>
                 </div>
               )}

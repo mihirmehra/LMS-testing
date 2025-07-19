@@ -1,7 +1,7 @@
 export interface Notification {
   id: string;
   userId: string;
-  type: 'meeting_reminder' | 'reminder' | 'lead_update' | 'task_reminder' | 'system_alert' | 'calendar_event';
+  type: 'meeting_reminder' | 'reminder' | 'lead_update' | 'task_reminder' | 'system_alert' | 'calendar_event' | 'lead_assignment';
   title: string;
   message: string;
   data?: Record<string, any>;

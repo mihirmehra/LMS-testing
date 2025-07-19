@@ -11,7 +11,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useLeads } from '@/hooks/useLeads';
 import { Lead } from '@/types/lead';
-import { useNotifications } from '@/hooks/useNotifications'; // Import useNotifications hook
+import { useNotifications } from '@/hooks/useNotifications';
+import { useAuth } from '@/hooks/useAuth'; // <--- IMPORT YOUR useAuth HOOK HERE!
 import {
   Users,
   UserPlus,
@@ -29,8 +30,11 @@ interface LeadAssignmentProps {
 }
 
 export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
+  const { user, isLoading: authLoading } = useAuth(); // <--- USE YOUR useAuth HOOK HERE!
+  const currentUserId = user?.id; // <--- GET THE CURRENT USER'S ID FROM YOUR AUTH STATE
+
   const { leads, updateLead, fetchLeads } = useLeads();
-  const { createNotification } = useNotifications(); // Access createNotification from the hook
+  const { createNotification } = useNotifications();
   const [agents, setAgents] = useState<any[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
@@ -59,7 +63,6 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
 
       if (response.ok) {
         const users = await response.json();
-        // Filter to only include users with role 'agent'
         const agentUsers = users.filter((u: any) => u.role === 'agent' && u.isActive);
         setAgents(agentUsers);
       } else {
@@ -74,7 +77,6 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
     }
   };
 
-  // Filter leads based on assignment status
   const filteredLeads = leads.filter(lead => {
     if (filterStatus === 'unassigned') {
       return !lead.assignedAgent;
@@ -116,13 +118,20 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
       setMessage({ type: 'error', text: 'Please select an agent' });
       return;
     }
+    // Check if currentUserId is available before proceeding, especially for notifications
+    if (!currentUserId) {
+        setMessage({ type: 'error', text: 'Authentication error: Current user ID not available. Please log in again.' });
+        console.error('Authentication error: Current user ID is null/undefined.');
+        return;
+    }
 
     setLoading(true);
     const agentName = getAgentName(selectedAgent);
+    const assignedAgentId = selectedAgent;
+
     try {
-      // Update each selected lead
       for (const leadId of selectedLeads) {
-        await updateLead(leadId, { assignedAgent: selectedAgent });
+        await updateLead(leadId, { assignedAgent: assignedAgentId });
       }
 
       setMessage({
@@ -130,14 +139,15 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
         text: `Successfully assigned ${selectedLeads.length} lead(s) to agent`
       });
 
-      // Trigger success notification
-      createNotification({
-        title: 'Leads Assigned!',
-        message: `${selectedLeads.length} lead(s) have been successfully assigned to ${agentName}.`,
-        type: 'lead_update', // Corrected type: 'lead_update' is valid
+      // Notification for the ASSIGNED AGENT
+      await createNotification({
+        userId: assignedAgentId, // Target the assigned agent
+        title: 'New Lead Assignment!',
+        message: `${selectedLeads.length} lead(s) have been assigned to you.`,
+        type: 'lead_assignment',
         priority: 'high',
-        actionUrl: '/leads', // Optional: link to a leads management page
-        actionLabel: 'View Leads'
+        actionUrl: '/leads',
+        actionLabel: 'View Assigned Leads'
       });
 
       setSelectedLeads([]);
@@ -148,11 +158,12 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
       setMessage({ type: 'error', text: 'Failed to assign leads' });
       console.error('Lead assignment error:', error);
 
-      // Trigger error notification
-      createNotification({
+      // Notification for the CURRENT USER (ADMIN) who faced the error
+      await createNotification({
+        userId: currentUserId, // Target the current user (admin)
         title: 'Lead Assignment Failed',
         message: `Failed to assign leads. Please try again.`,
-        type: 'system_alert', // Corrected type: 'system_alert'
+        type: 'system_alert',
         priority: 'high',
       });
     } finally {
@@ -173,15 +184,19 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
       'Nurturing': 'bg-amber-100 text-amber-800 border-amber-200',
       'RNR': 'bg-yellow-100 text-yellow-800 border-yellow-200',
       'Busy': 'bg-rose-100 text-rose-800 border-rose-200',
-      'Disconnected': 'bg-slate-100 text-slate-800 border-slate-200',
+      'Disconnected': 'bg-gray-200 text-gray-700 border-gray-300',
+      'Switch Off': 'bg-gray-200 text-gray-700 border-gray-300',
+      'Invalid Number': 'bg-gray-200 text-gray-700 border-gray-300',
+      'Incoming Call Not Allowed (ICNA)': 'bg-gray-200 text-gray-700 border-gray-300',
+      'DNE (Does Not Exist)': 'bg-gray-200 text-gray-700 border-gray-300',
       'Not Interested': 'bg-red-100 text-red-800 border-red-200',
       'Not Interested (project)': 'bg-red-200 text-red-900 border-red-300',
-      'Low Potential': 'bg-gray-200 text-gray-800 border-gray-300',
+      'Low Potential': 'bg-orange-100 text-orange-800 border-orange-200',
       'Site Visit Scheduled': 'bg-indigo-100 text-indigo-800 border-indigo-200',
-      'Site Visited': 'bg-cyan-100 text-cyan-800 border-cyan-200',
-      'Negotiation': 'bg-orange-100 text-orange-800 border-orange-200',
+      'Site Visited': 'bg-teal-100 text-teal-800 border-teal-200',
+      'Negotiation': 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200',
       'Converted': 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      'Lost': 'bg-zinc-100 text-zinc-800 border-zinc-200',
+      'Lost': 'bg-stone-100 text-stone-800 border-stone-200',
       'Hold': 'bg-neutral-100 text-neutral-800 border-neutral-200',
     };
     return colors[status as keyof typeof colors] || colors['New'];
@@ -206,7 +221,7 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
           </Badge>
           <Button
             onClick={handleBulkAssign}
-            disabled={selectedLeads.length === 0}
+            disabled={selectedLeads.length === 0 || authLoading || !currentUserId} // Disable if auth is loading or no user ID
             className="bg-green-600 hover:bg-green-700"
           >
             <UserPlus className="h-4 w-4 mr-2" />
@@ -291,7 +306,7 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
                 <div className="space-y-3">
                   <div className="text-sm text-gray-600">
                     <p><strong>Budget:</strong> {lead.budgetRange}</p>
-                    <p><strong>Locations:</strong> {lead.preferredLocations && Array.isArray(lead.preferredLocations) && lead.preferredLocations.length > 0 ? lead.preferredLocations.join(', ') : 'N/A'} {/* Or an empty string '' if you prefer nothing */}</p>
+                    <p><strong>Locations:</strong> {lead.preferredLocations && Array.isArray(lead.preferredLocations) && lead.preferredLocations.length > 0 ? lead.preferredLocations.join(', ') : 'N/A'} </p>
                     <p><strong>Source:</strong> {lead.source}</p>
                   </div>
 
@@ -410,7 +425,7 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
             </Button>
             <Button
               onClick={handleAssignLeads}
-              disabled={loading || !selectedAgent || selectedAgent === "none"}
+              disabled={loading || !selectedAgent || selectedAgent === "none" || authLoading || !currentUserId} // Add disable conditions
               className="bg-green-600 hover:bg-green-700"
             >
               {loading ? (

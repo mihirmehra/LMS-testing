@@ -1,395 +1,171 @@
-'use client';
+// hooks/useNotifications.ts
 
-import { useState, useEffect, useCallback } from 'react';
-import { Notification, NotificationStats } from '@/types/notification';
-import { useAuth } from '@/hooks/useAuth';
+import { useState, useCallback, useEffect } from 'react';
+import { Notification } from '@/types/notification'; // Make sure this path is correct
+
+interface CreateNotificationPayload {
+  userId: string;
+  title: string;
+  message: string;
+  type: Notification['type'];
+  priority: Notification['priority'];
+  actionUrl?: string;
+  actionLabel?: string;
+}
 
 export function useNotifications() {
-  const { user, isAuthenticated } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Generate mock notifications for demo purposes
-  const generateMockNotifications = useCallback((): Notification[] => {
-    if (!user) return [];
+  // --- NEW: Derive unreadCount ---
+  const unreadCount = notifications.filter(n => !n.read).length;
 
-    const mockNotifications: Notification[] = [
-      {
-        id: 'notif-1',
-        userId: user.id,
-        type: 'meeting_reminder',
-        title: 'Upcoming Meeting',
-        message: 'You have a meeting with John Doe in 30 minutes',
-        priority: 'high',
-        read: false,
-        createdAt: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago
-        actionUrl: '/calendar',
-        actionLabel: 'View Calendar',
-      },
-      {
-        id: 'notif-2',
-        userId: user.id,
-        type: 'lead_update',
-        title: 'New Lead Assigned',
-        message: 'A new lead "Jane Smith" has been assigned to you',
-        priority: 'medium',
-        read: false,
-        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        actionUrl: '/',
-        actionLabel: 'View Lead',
-      },
-      {
-        id: 'notif-3',
-        userId: user.id,
-        type: 'task_reminder',
-        title: 'Task Due Soon',
-        message: 'Follow up call with Robert Kim is due in 1 hour',
-        priority: 'medium',
-        read: false,
-        createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
-        actionUrl: '/',
-        actionLabel: 'View Tasks',
-      },
-      {
-        id: 'notif-4',
-        userId: user.id,
-        type: 'system_alert',
-        title: 'System Update',
-        message: 'New features have been added to the CRM system',
-        priority: 'low',
-        read: true,
-        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-      },
-      {
-        id: 'notif-5',
-        userId: user.id,
-        type: 'calendar_event',
-        title: 'Site Visit Scheduled',
-        message: 'Site visit with Maria Garcia scheduled for tomorrow at 2 PM',
-        priority: 'medium',
-        read: true,
-        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-        actionUrl: '/calendar',
-        actionLabel: 'View Calendar',
-      },
-    ];
-
-    return mockNotifications;
-  }, [user]);
-
-  // Fetch notifications from API with fallback to mock data
-  const fetchNotifications = useCallback(async () => {
-    if (!user || !isAuthenticated) {
-      setNotifications([]);
-      setLoading(false);
-      return;
-    }
-
+  // Function to fetch notifications for the current user
+  const fetchNotifications = useCallback(async (userId?: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-      
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        // Use mock data if no token
-        const mockData = generateMockNotifications();
-        setNotifications(mockData);
-        setLoading(false);
-        return;
-      }
-      
-      const response = await fetch('/api/notifications', {
+      // If userId is provided, fetch for that user, otherwise assume current logged-in user (backend handles it)
+      const url = userId ? `/api/notifications?userId=${userId}` : '/api/notifications';
+      const response = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`, // Assuming auth token is used
         },
       });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setNotifications(Array.isArray(data) ? data : []);
-      } else {
-        // Fallback to mock data if API fails
-        console.warn('API failed, using mock notifications');
-        const mockData = generateMockNotifications();
-        setNotifications(mockData);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch notifications');
       }
-    } catch (err) {
-      console.warn('Error fetching notifications, using mock data:', err);
-      // Use mock data as fallback
-      const mockData = generateMockNotifications();
-      setNotifications(mockData);
-      setError(null); // Don't show error to user, just use mock data
+
+      const fetchedNotifications: Notification[] = await response.json();
+      setNotifications(fetchedNotifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())); // Sort by newest first
+    } catch (err: any) {
+      console.error('Error fetching notifications:', err);
+      setError(err.message || 'An unexpected error occurred while fetching notifications');
     } finally {
       setLoading(false);
     }
-  }, [user, isAuthenticated, generateMockNotifications]);
+  }, []);
 
-  /**
-   * Marks a specific notification as read both locally and by calling the API.
-   * @param notificationId The ID of the notification to mark as read.
-   */
-  const markAsRead = async (notificationId: string) => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        const response = await fetch(`/api/notifications/${notificationId}/read`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
+  // --- NEW: Fetch notifications on initial mount ---
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
 
-        if (!response.ok) {
-          throw new Error('Failed to mark as read');
-        }
-      }
-
-      // Update local state regardless of API success for immediate UI feedback
-      setNotifications(prev => 
-        prev.map(notification => 
-          notification.id === notificationId 
-            ? { ...notification, read: true }
-            : notification
-        )
-      );
-    } catch (error) {
-      console.warn('Error marking notification as read:', error);
-      // Still update local state for better UX even if API fails
-      setNotifications(prev => 
-        prev.map(notification => 
-          notification.id === notificationId 
-            ? { ...notification, read: true }
-            : notification
-        )
-      );
-    }
-  };
-
-  /**
-   * Marks all notifications as read both locally and by calling the API.
-   */
-  const markAllAsRead = async () => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        const response = await fetch('/api/notifications/mark-all-read', {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to mark all as read');
-        }
-      }
-
-      // Update local state regardless of API success
-      setNotifications(prev => 
-        prev.map(notification => ({ ...notification, read: true }))
-      );
-    } catch (error) {
-      console.warn('Error marking all notifications as read:', error);
-      // Still update local state for better UX
-      setNotifications(prev => 
-        prev.map(notification => ({ ...notification, read: true }))
-      );
-    }
-  };
-
-  /**
-   * Deletes a specific notification locally and by calling the API.
-   * @param notificationId The ID of the notification to delete.
-   */
-  const deleteNotification = async (notificationId: string) => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        const response = await fetch(`/api/notifications/${notificationId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to delete notification');
-        }
-      }
-
-      // Update local state regardless of API success
-      setNotifications(prev => 
-        prev.filter(notification => notification.id !== notificationId)
-      );
-    } catch (error) {
-      console.warn('Error deleting notification:', error);
-      // Still update local state for better UX
-      setNotifications(prev => 
-        prev.filter(notification => notification.id !== notificationId)
-      );
-    }
-  };
-
-  /**
-   * Creates a new notification locally and optionally via API.
-   * @param notification The notification data to create (excluding id, userId, createdAt, read).
-   * @returns The newly created notification object.
-   */
-  const createNotification = async (notification: Omit<Notification, 'id' | 'userId' | 'createdAt' | 'read'>) => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        const response = await fetch('/api/notifications', {
+  // Function to create a new notification
+  const createNotification = useCallback(
+    async (payload: CreateNotificationPayload) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch('/api/notifications/', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           },
-          body: JSON.stringify(notification),
+          body: JSON.stringify(payload),
         });
 
-        if (response.ok) {
-          const newNotification = await response.json();
-          setNotifications(prev => [newNotification, ...prev]);
-          return newNotification;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to create notification');
         }
+
+        const newNotification: Notification = await response.json();
+        setNotifications(prev => [newNotification, ...prev].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        return newNotification;
+      } catch (err: any) {
+        console.error('Error creating notification:', err);
+        setError(err.message || 'An unexpected error occurred during creation');
+        throw err;
+      } finally {
+        setLoading(false);
       }
+    },
+    []
+  );
 
-      // Create local notification if API fails or no token
-      const localNotification: Notification = {
-        ...notification,
-        id: `local-${Date.now()}`,
-        userId: user?.id || '',
-        read: false,
-        createdAt: new Date(),
-      };
-
-      setNotifications(prev => [localNotification, ...prev]);
-      return localNotification;
-    } catch (error) {
-      console.warn('Error creating notification:', error);
-      
-      // Create local notification as fallback in case of error
-      const localNotification: Notification = {
-        ...notification,
-        id: `local-${Date.now()}`,
-        userId: user?.id || '',
-        read: false,
-        createdAt: new Date(),
-      };
-
-      setNotifications(prev => [localNotification, ...prev]);
-      return localNotification;
-    }
-  };
-
-  // Get notification stats
-  const getStats = (): NotificationStats => {
-    const unread = notifications.filter(n => !n.read);
-    const byType = notifications.reduce((acc, notification) => {
-      acc[notification.type] = (acc[notification.type] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    return {
-      total: notifications.length,
-      unread: unread.length,
-      byType,
-      recent: notifications.slice(0, 5),
-    };
-  };
-
-  // Check for upcoming meetings and create reminders
-  const checkUpcomingMeetings = useCallback(async () => {
-    if (!user) return;
-
+  // Function to mark a single notification as read
+  const markAsRead = useCallback(async (notificationId: string) => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-
-      const response = await fetch(`/api/communications/calendar?userId=${user.id}`, {
+      const response = await fetch(`/api/notifications/${notificationId}/read`, {
+        method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         },
       });
 
-      if (response.ok) {
-        const events = await response.json();
-        const now = new Date();
-        const reminderWindow = 30 * 60 * 1000; // 30 minutes
-
-        events.forEach((event: any) => {
-          const eventTime = new Date(event.startDateTime);
-          const timeDiff = eventTime.getTime() - now.getTime();
-
-          // Create reminder if event is within 30 minutes
-          if (timeDiff > 0 && timeDiff <= reminderWindow) {
-            const existingReminder = notifications.find(n => 
-              n.type === 'meeting_reminder' && 
-              n.data?.eventId === event.id &&
-              !n.read // Only check for unread reminders
-            );
-
-            if (!existingReminder) {
-              createNotification({
-                type: 'meeting_reminder',
-                title: 'Upcoming Meeting',
-                message: `Meeting "${event.title}" starts in ${Math.round(timeDiff / (1000 * 60))} minutes`,
-                priority: 'high',
-                data: {
-                  eventId: event.id,
-                  eventTitle: event.title,
-                  startTime: event.startDateTime,
-                },
-                actionUrl: '/calendar',
-                actionLabel: 'View Calendar',
-              });
-            }
-          }
-        });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to mark notification as read');
       }
-    } catch (error) {
-      console.warn('Error checking upcoming meetings:', error);
-    }
-  }, [user, notifications, createNotification]); // Added createNotification to dependency array
 
-  // Initialize notifications when user is available
-  useEffect(() => {
-    if (user && isAuthenticated) {
-      fetchNotifications();
-    } else {
-      setNotifications([]);
-      setLoading(false);
+      setNotifications(prev =>
+        prev.map(n => (n.id === notificationId ? { ...n, read: true } : n))
+      );
+    } catch (err: any) {
+      console.error('Error marking notification as read:', err);
+      setError(err.message || 'An unexpected error occurred while marking as read');
     }
-  }, [user, isAuthenticated, fetchNotifications]);
+  }, []);
 
-  // Set up polling for real-time updates (reduced frequency to avoid API overload)
-  useEffect(() => {
-    if (user && isAuthenticated) {
-      // Check for upcoming meetings every 5 minutes
-      const meetingInterval = setInterval(checkUpcomingMeetings, 5 * 60 * 1000);
-      
-      // Fetch notifications every 2 minutes (reduced from 30 seconds)
-      const notificationInterval = setInterval(fetchNotifications, 2 * 60 * 1000);
+  // --- NEW: Function to mark all notifications as read ---
+  const markAllAsRead = useCallback(async () => {
+    try {
+      const response = await fetch('/api/notifications/mark-all-read', {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+      });
 
-      return () => {
-        clearInterval(meetingInterval);
-        clearInterval(notificationInterval);
-      };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to mark all notifications as read');
+      }
+
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (err: any) {
+      console.error('Error marking all notifications as read:', err);
+      setError(err.message || 'An unexpected error occurred while marking all as read');
     }
-  }, [user, isAuthenticated, fetchNotifications, checkUpcomingMeetings]);
+  }, []);
+
+  // --- NEW: Function to delete a notification ---
+  const deleteNotification = useCallback(async (notificationId: string) => {
+    try {
+      const response = await fetch(`/api/notifications/${notificationId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to delete notification');
+      }
+
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    } catch (err: any) {
+      console.error('Error deleting notification:', err);
+      setError(err.message || 'An unexpected error occurred while deleting');
+    }
+  }, []);
+
 
   return {
     notifications,
+    unreadCount, // <--- EXPOSED
     loading,
     error,
-    stats: getStats(),
-    unreadCount: notifications.filter(n => !n.read).length,
-    fetchNotifications,
-    markAsRead, // This function is correctly exposed
-    markAllAsRead,
-    deleteNotification,
     createNotification,
+    fetchNotifications,
+    markAsRead,
+    markAllAsRead, // <--- EXPOSED
+    deleteNotification, // <--- EXPOSED
   };
 }
