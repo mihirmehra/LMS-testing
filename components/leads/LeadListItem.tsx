@@ -23,7 +23,7 @@ interface LeadListItemProps {
 // Define the exact status options available for a lead
 // Use 'as const' to make it a tuple of literal strings, and then assert its type
 const LEAD_STATUS_OPTIONS = [
-  'New', 'Contacted', 'Qualified', 'Nurturing', 'RNR', 'Busy', 'Disconnected', 'Switch Off', 'Invalid Number', 'Incoming Call Not Allowed (ICNA)', 'DNE (Does Not Exist)', 'Not Interested', 'Not Interested (project)', 'Low Potential',
+  'New', 'Contacted', 'Qualified', 'Nurturing', 'RNR', 'Busy', 'Disconnected', 'Switch Off', 'Invalid Number', 'Incoming Call Not Allowed (ICNA)', 'DNE (Does Not Exist)', 'Forward call', 'Out Of Network', 'Not Interested', 'Not Interested (project)', 'Low Potential',
   'Site Visit Scheduled', 'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'
 ] as const satisfies readonly Lead['status'][]; // Using 'satisfies' for type safety without widening
 
@@ -56,6 +56,8 @@ export function LeadListItem({ lead, onViewDetails, onEditLead, onStatusChange }
       'Invalid Number': 'bg-gray-200 text-gray-700 border-gray-300',
       'Incoming Call Not Allowed (ICNA)': 'bg-gray-200 text-gray-700 border-gray-300',
       'DNE (Does Not Exist)': 'bg-gray-200 text-gray-700 border-gray-300',
+      'Forward call': 'bg-gray-200 text-gray-700 border-gray-300',
+      'Out Of Network': 'bg-gray-200 text-gray-700 border-gray-300',
       'Not Interested': 'bg-red-100 text-red-800 border-red-200',
       'Not Interested (project)': 'bg-red-200 text-red-900 border-red-300',
       'Low Potential': 'bg-orange-100 text-orange-800 border-orange-200',

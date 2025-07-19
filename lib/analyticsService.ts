@@ -176,7 +176,7 @@ export class AnalyticsService {
     const userFilteredLeads = this.filterLeadsForUser(leads, user ?? null);
     const filteredLeads = this.applyFilters(userFilteredLeads, filters);
     const statusOrder = [
-      'New', 'Contacted', 'Qualified', 'Nurturing', 'RNR', 'Busy', 'Disconnected', 'Switch Off', 'Invalid Number', 'Incoming Call Not Allowed (ICNA)', 'DNE (Does Not Exist)','Not Interested', 'Not Interested (project)', 'Low Potential', 'Site Visit Scheduled',  
+      'New', 'Contacted', 'Qualified', 'Nurturing', 'RNR', 'Busy', 'Disconnected', 'Switch Off', 'Invalid Number', 'Incoming Call Not Allowed (ICNA)', 'DNE (Does Not Exist)', 'Forward call', 'Out Of Network', 'Not Interested', 'Not Interested (project)', 'Low Potential', 'Site Visit Scheduled',  
       'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'
     ];
 

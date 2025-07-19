@@ -21,7 +21,7 @@ interface LeadFiltersProps {
 }
 
 const statusOptions = [
-  'New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled','RNR', 'Busy', 'Disconnected', 'Switch Off', 'Invalid Number', 'Incoming Call Not Allowed (ICNA)', 'DNE (Does Not Exist)', 'Not Interested', 'Not Interested (project)', 'Low Potential',
+  'New', 'Contacted', 'Qualified', 'Nurturing', 'Site Visit Scheduled','RNR', 'Busy', 'Disconnected', 'Switch Off', 'Invalid Number', 'Incoming Call Not Allowed (ICNA)', 'DNE (Does Not Exist)', 'Forward call', 'Out Of Network', 'Not Interested', 'Not Interested (project)', 'Low Potential',
   'Site Visited', 'Negotiation', 'Converted', 'Lost', 'Hold'
 ];
 

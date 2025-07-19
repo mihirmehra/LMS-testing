@@ -28,7 +28,9 @@ export interface Lead {
         | 'Switch Off'
         | 'Invalid Number'
         | 'Incoming Call Not Allowed (ICNA)'
-        | 'DNE (Does Not Exist)'; 
+        | 'DNE (Does Not Exist)'
+        | 'Forward call'
+        | 'Out Of Network';
   assignedAgent?: string;
   notes: string;
   createdAt: Date;
