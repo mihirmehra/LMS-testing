@@ -31,10 +31,10 @@ interface LeadAssignmentProps {
 
 export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
   const { user, isLoading: authLoading } = useAuth();
-  const currentUserId = user?.id;
+  const currentUserId = user?.id; // This is the ID of the ADMIN logged in
 
   const { leads, updateLead, fetchLeads } = useLeads();
-  const { createNotification } = useNotifications();
+  const { createNotification } = useNotifications(); // This is the function to create notifications
   const [agents, setAgents] = useState<any[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
@@ -132,55 +132,50 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
         await updateLead(leadId, { assignedAgent: assignedAgentId });
       }
 
+      // Display success message to the ADMIN who performed the action (in-page feedback)
       setMessage({
         type: 'success',
         text: `Successfully assigned ${selectedLeads.length} lead(s) to ${agentName}.`
       });
 
-      // --- IMPORTANT CHANGE HERE: Send notification to the ASSIGNED AGENT ---
+      // --- CRITICAL FIX: Send notification ONLY to the ASSIGNED AGENT ---
       await createNotification({
-        userId: assignedAgentId, // Target the assigned agent's userId
+        userId: assignedAgentId, // THIS IS THE KEY: Target the actual assigned agent
         title: 'New Leads Assigned!',
         message: `You have been assigned ${selectedLeads.length} new lead(s). Check your leads for details!`,
-        type: 'lead_assignment', // Use a specific type for lead assignment notifications
-        priority: 'high', // Mark as high priority
-        actionUrl: '/leads', // Link to the leads page for the agent
+        type: 'lead_assignment', // Specific type for easy identification/filtering
+        priority: 'high', // High priority for important assignments
+        actionUrl: '/leads', // Link to the agent's leads dashboard
         actionLabel: 'View Assigned Leads',
-        // --- This next property is CONCEPTUAL for push notifications ---
-        // If your createNotification and backend support it, you'd pass a flag/token
-        // isPush: true, 
-        // pushToken: agent.pushNotificationToken // assuming you fetch this with agent data
       });
 
-      // Optional: If you still want the admin to get a confirmation toast/notification
-      // This is primarily for the admin's immediate feedback on their action
-      await createNotification({
-        userId: currentUserId, // Target the admin who performed the action
-        title: 'Lead Assignment Successful',
-        message: `You have successfully assigned ${selectedLeads.length} lead(s) to ${agentName}.`,
-        type: 'system_alert',
-        priority: 'low',
-      });
+      // --- REMOVED THE SECOND createNotification CALL FOR ADMIN CONFIRMATION ---
+      // The `setMessage` above already provides sufficient in-page feedback to the admin.
+      // Eliminating this prevents any potential confusion or misdirection of notifications.
 
-
+      // Reset selection and close modal
       setSelectedLeads([]);
       setSelectedAgent('');
       setIsAssignModalOpen(false);
-      onAssignmentComplete?.();
+      onAssignmentComplete?.(); // Trigger any callback after assignment
+
     } catch (error) {
+      // Handle errors during assignment
       setMessage({ type: 'error', text: 'Failed to assign leads' });
       console.error('Lead assignment error:', error);
 
-      // Notification for the CURRENT USER (ADMIN) who faced the error
-      await createNotification({
-        userId: currentUserId, // Target the current user (admin)
-        title: 'Lead Assignment Failed',
-        message: `Failed to assign leads. Please try again.`,
-        type: 'system_alert',
-        priority: 'high',
-      });
+      // Send a notification to the CURRENT USER (ADMIN) if the assignment fails
+      if (currentUserId) { // Ensure currentUserId exists before attempting to send error notification
+          await createNotification({
+            userId: currentUserId, // Target the admin who faced the error
+            title: 'Lead Assignment Failed',
+            message: `Failed to assign leads. Please try again. Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            type: 'system_alert', // Indicate this is a system-level alert for the admin
+            priority: 'high',
+          });
+      }
     } finally {
-      setLoading(false);
+      setLoading(false); // Always stop loading
     }
   };
 
