@@ -1,46 +1,76 @@
 // app/api/notifications/devices/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth } from '@/lib/auth/server-utils'; // Centralized auth
-// Import your MongoDB-backed functions from push-devices
-import { deleteDeviceRegistration, getDeviceRegistrations } from '@/lib/dev-db/push-devices';
+import { verifyAuth } from '@/lib/auth/server-utils'; // Centralized authentication
+import {
+  deleteDeviceRegistration,
+  getDeviceRegistrationById // <--- NEW IMPORT: Import the specific device retrieval function
+} from '@/lib/dev-db/push-devices';
+import { DeviceRegistration } from '@/types/device'; // Import for typing
 
+/**
+ * Handles DELETE requests to unregister (delete) a specific device registration. 
+ * The device ID is provided as a dynamic segment in the URL.
+ */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } } // `params.id` will contain the device ID
 ) {
   try {
     const decoded = verifyAuth(request); // Authentication check
+    // Ensure the decoded token has a userId
+    if (!decoded || !decoded.userId) {
+        throw new Error('Authentication token invalid or missing userId.');
+    }
 
-    // Ensure the device belongs to the authenticated user before deleting
-    // FIX 1: Await the call to getDeviceRegistrations() as it is now async
-    const allDevices = await getDeviceRegistrations(); // <--- AWAIT THIS CALL
-    const deviceToDelete = allDevices.find(d => d.id === params.id && d.userId === decoded.userId);
+    const deviceId = params.id; // Get the device ID from the URL parameters
 
-    if (!deviceToDelete) {
+    if (!deviceId) {
       return NextResponse.json(
-        { message: 'Device not found or unauthorized' },
-        { status: 404 }
+        { message: 'Device ID is required for deletion.' },
+        { status: 400 }
       );
     }
 
-    // FIX 2: Await the call to deleteDeviceRegistration() as it is now async
-    const success = await deleteDeviceRegistration(params.id); // <--- AWAIT THIS CALL
+    // --- Security Check: Verify device ownership efficiently ---
+    // Fetch the specific device by its ID
+    const deviceToDelete: DeviceRegistration | null = await getDeviceRegistrationById(deviceId);
+
+    // If device not found OR if it doesn't belong to the authenticated user
+    if (!deviceToDelete || deviceToDelete.userId !== decoded.userId) {
+      return NextResponse.json(
+        { message: 'Device not found or you are not authorized to delete this device.' },
+        { status: 404 } // Use 404 Not Found for both cases (hides whether it exists but is unauthorized)
+      );
+    }
+
+    // If ownership is verified, proceed with deletion
+    const success = await deleteDeviceRegistration(deviceId);
 
     if (!success) {
-      // This case should ideally not happen if deviceToDelete was found, but good for robustness
+      // This case means the DB operation to delete failed, which is unexpected if found.
+      console.error(`Failed to delete device ${deviceId} for user ${decoded.userId} after ownership verification.`);
       return NextResponse.json(
-        { message: 'Failed to unregister device' },
+        { message: 'Failed to unregister device due to a database error.' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ message: 'Device unregistered successfully' });
+    return NextResponse.json(
+      { message: 'Device unregistered successfully.' },
+      { status: 200 }
+    );
+
   } catch (error) {
-    console.error('Unregister device error:', error);
+    console.error('API DELETE /notifications/devices/[id] error:', error);
 
     if (error instanceof Error) {
       if (error.message.includes('Authentication required') || error.message.includes('Invalid or expired token')) {
         return NextResponse.json({ message: error.message }, { status: 401 });
+      }
+      // If the `getDeviceRegistrationById` or `deleteDeviceRegistration` functions
+      // throw specific errors (e.g., invalid ObjectId format), handle them here.
+      if (error.message.includes('invalid ObjectId')) {
+        return NextResponse.json({ message: 'Invalid device ID format.' }, { status: 400 });
       }
     }
 

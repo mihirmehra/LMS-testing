@@ -1,8 +1,9 @@
+// app/layout.tsx
 import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { AuthProvider } from '@/hooks/useAuth';
-import { ClientLayout } from '@/components/layout/ClientLayout';
+import { ClientLayout } from '@/components/layout/ClientLayout'; // Ensure this path is correct
 
 const inter = Inter({ subsets: ['latin'] });
 

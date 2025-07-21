@@ -1,3 +1,4 @@
+// NotificationsPage.tsx
 'use client';
 
 import { useState } from 'react';
@@ -28,16 +29,45 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
+// Define the Notification type based on your usage
+// IMPORTANT: This interface MUST accurately reflect the 'type' and 'priority'
+// strings that your backend actually sends.
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  // This is CRITICAL for stats and filtering.
+  // Add all possible notification types returned by your backend API here.
+  type: 'meeting_reminder' | 'calendar_event' | 'task_reminder' | 'lead_update' | 'lead_assignment' | 'system_alert' | string;
+  priority: 'high' | 'medium' | 'low' | string;
+  read: boolean;
+  createdAt: string | Date; // Can be string (ISO) or Date object
+  actionUrl?: string;
+  actionLabel?: string; // Added from NotificationCenter for consistency
+}
+
 export default function NotificationsPage() {
   const { user } = useAuth();
+  // Ensure the useNotifications hook provides the expected types
   const { 
     notifications, 
     unreadCount, 
     markAsRead, 
     markAllAsRead, 
     deleteNotification,
-    loading 
-  } = useNotifications();
+    loading,
+    error: notificationsError, // Access error state from hook
+    fetchNotifications // Assuming your hook provides a way to refetch
+  } = useNotifications() as { 
+    notifications: Notification[];
+    unreadCount: number;
+    markAsRead: (id: string) => void;
+    markAllAsRead: () => void;
+    deleteNotification: (id: string) => void;
+    loading: boolean;
+    error: string | null; // Added error type
+    fetchNotifications: () => Promise<void>; // Added fetchNotifications type
+  };
 
   type Preferences = {
     emailNotifications: boolean;
@@ -52,32 +82,38 @@ export default function NotificationsPage() {
   const [selectedNotifications, setSelectedNotifications] = useState<string[]>([]);
 
   // Notification preferences state
+  // Ensure default values are based on user preferences or sensible defaults
   const [preferences, setPreferences] = useState<Preferences>({
     emailNotifications: user?.preferences?.notifications?.email ?? true,
     pushNotifications: user?.preferences?.notifications?.push ?? true,
     leadUpdates: user?.preferences?.notifications?.leadUpdates ?? true,
     taskReminders: user?.preferences?.notifications?.taskReminders ?? true,
-    meetingReminders: true,
-    systemAlerts: true,
+    meetingReminders: user?.preferences?.notifications?.meetingReminders ?? true, // Added default
+    systemAlerts: user?.preferences?.notifications?.systemAlerts ?? true,     // Added default
   });
 
-const [leadsPerPage, setLeadsPerPage] = useState(10);
+  const [leadsPerPage, setLeadsPerPage] = useState(10); // Example, ensure this is persisted if needed
 
+  // Filter notifications based on the selected filter type
   const filteredNotifications = notifications.filter(notification => {
     switch (filter) {
       case 'unread':
         return !notification.read;
       case 'meetings':
+        // Ensure these type strings exactly match what your backend sends
         return notification.type === 'meeting_reminder' || notification.type === 'calendar_event';
       case 'tasks':
+        // Ensure this type string exactly matches what your backend sends
         return notification.type === 'task_reminder';
       case 'system':
+        // Ensure this type string exactly matches what your backend sends
         return notification.type === 'system_alert';
       default:
         return true;
     }
   });
 
+  // Helper function to get the icon based on notification type
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'meeting_reminder':
@@ -86,6 +122,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
       case 'task_reminder':
         return <Clock className="h-5 w-5 text-amber-600" />;
       case 'lead_update':
+      case 'lead_assignment': // Added for completeness based on NotificationCenter
         return <User className="h-5 w-5 text-green-600" />;
       case 'system_alert':
         return <Settings className="h-5 w-5 text-red-600" />;
@@ -94,6 +131,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
     }
   };
 
+  // Helper function to get priority badge color
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high':
@@ -107,32 +145,38 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
     }
   };
 
-  const formatTime = (date: Date) => {
+  // Improved time formatting for readability
+  const formatTime = (dateInput: Date | string) => {
+    const date = new Date(dateInput);
     const now = new Date();
-    const notificationDate = new Date(date);
-    const diff = now.getTime() - notificationDate.getTime();
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const diffMs = now.getTime() - date.getTime();
 
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    
-    return notificationDate.toLocaleDateString();
+    const seconds = Math.floor(diffMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    const months = Math.floor(days / 30);
+    const years = Math.floor(days / 365);
+
+    if (years > 0) return `${years}y ago`;
+    if (months > 0) return `${months}mo ago`;
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'Just now';
   };
 
-  const handleNotificationClick = (notification: any) => {
+  // Handles clicking on a single notification
+  const handleNotificationClick = (notification: Notification) => {
     if (!notification.read) {
       markAsRead(notification.id);
     }
-
     if (notification.actionUrl) {
       window.location.href = notification.actionUrl;
     }
   };
 
+  // Handles selecting/deselecting individual notifications for bulk actions
   const handleSelectNotification = (notificationId: string) => {
     setSelectedNotifications(prev => 
       prev.includes(notificationId)
@@ -141,6 +185,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
     );
   };
 
+  // Handles selecting/deselecting all filtered notifications
   const handleSelectAll = () => {
     if (selectedNotifications.length === filteredNotifications.length) {
       setSelectedNotifications([]);
@@ -149,11 +194,13 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
     }
   };
 
+  // Handles bulk deletion of selected notifications
   const handleBulkDelete = () => {
     selectedNotifications.forEach(id => deleteNotification(id));
-    setSelectedNotifications([]);
+    setSelectedNotifications([]); // Clear selection after action
   };
 
+  // Handles bulk marking as read for selected notifications
   const handleBulkMarkAsRead = () => {
     selectedNotifications.forEach(id => {
       const notification = notifications.find(n => n.id === id);
@@ -161,15 +208,22 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
         markAsRead(id);
       }
     });
-    setSelectedNotifications([]);
+    setSelectedNotifications([]); // Clear selection after action
   };
 
+  // --- THE CORE LOGIC FOR STATS ---
+  // This calculates the counts displayed in the cards.
+  // The accuracy of these numbers DEPENDS on the 'type' property
+  // of the notification objects fetched by useNotifications matching
+  // the string literals used here.
   const notificationStats = {
     total: notifications.length,
-    unread: unreadCount,
+    unread: unreadCount, // unreadCount from useNotifications hook
     meetings: notifications.filter(n => n.type === 'meeting_reminder' || n.type === 'calendar_event').length,
     tasks: notifications.filter(n => n.type === 'task_reminder').length,
     system: notifications.filter(n => n.type === 'system_alert').length,
+    // Add other relevant stats here if needed, e.g., leadUpdates
+    leadUpdates: notifications.filter(n => n.type === 'lead_update' || n.type === 'lead_assignment').length,
   };
 
   return (
@@ -199,7 +253,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6"> {/* Adjusted grid for better responsiveness */}
             <Card className="border-0 shadow-md">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -261,6 +315,18 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                 </div>
               </CardContent>
             </Card>
+            {/* You could add a 'Lead Updates' card here as well if you uncommented the stat calculation */}
+            {/* <Card className="border-0 shadow-md">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Lead Updates</p>
+                    <p className="text-2xl font-bold text-purple-600">{notificationStats.leadUpdates}</p>
+                  </div>
+                  <User className="h-8 w-8 text-purple-400" />
+                </div>
+              </CardContent>
+            </Card> */}
           </div>
 
           <Tabs defaultValue="notifications" className="space-y-6">
@@ -283,7 +349,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-4"> {/* Added flex-wrap and gap */}
                     <div className="flex items-center space-x-4">
                       <Select value={filter} onValueChange={(value: any) => setFilter(value)}>
                         <SelectTrigger className="w-48">
@@ -303,7 +369,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                         size="sm"
                         onClick={handleSelectAll}
                       >
-                        {selectedNotifications.length === filteredNotifications.length ? 'Deselect All' : 'Select All'}
+                        {selectedNotifications.length === filteredNotifications.length && filteredNotifications.length > 0 ? 'Deselect All' : 'Select All'}
                       </Button>
                     </div>
                     
@@ -340,10 +406,10 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                 <CardHeader>
                   <CardTitle>
                     {filter === 'all' ? 'All Notifications' : 
-                     filter === 'unread' ? 'Unread Notifications' :
-                     filter === 'meetings' ? 'Meeting Notifications' :
-                     filter === 'tasks' ? 'Task Notifications' :
-                     'System Notifications'}
+                      filter === 'unread' ? 'Unread Notifications' :
+                      filter === 'meetings' ? 'Meeting Notifications' :
+                      filter === 'tasks' ? 'Task Notifications' :
+                      'System Notifications'}
                   </CardTitle>
                   <CardDescription>
                     Showing {filteredNotifications.length} of {notifications.length} notifications
@@ -353,6 +419,16 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                   {loading ? (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                      <p className="ml-2 text-gray-600">Loading notifications...</p>
+                    </div>
+                  ) : notificationsError ? ( // Display error if present
+                    <div className="flex flex-col items-center justify-center py-12 text-red-500 text-center px-4">
+                      <Settings className="h-12 w-12 mx-auto mb-4 text-red-300" />
+                      <h3 className="text-lg font-medium mb-2">Error loading notifications</h3>
+                      <p className="text-sm">{notificationsError}</p>
+                      <Button onClick={fetchNotifications} variant="outline" className="mt-4">
+                          Retry
+                      </Button>
                     </div>
                   ) : filteredNotifications.length > 0 ? (
                     <div className="space-y-4">
@@ -372,7 +448,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                                 e.stopPropagation();
                                 handleSelectNotification(notification.id);
                               }}
-                              className="mt-1"
+                              className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             
                             <div className="flex-shrink-0 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border">
@@ -386,7 +462,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                                 </h3>
                                 <div className="flex items-center space-x-2">
                                   {!notification.read && (
-                                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                    <div className="w-3 h-3 bg-blue-500 rounded-full flex-shrink-0"></div>
                                   )}
                                   <span className="text-sm text-gray-500">
                                     {formatTime(notification.createdAt)}
@@ -398,7 +474,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                                 {notification.message}
                               </p>
                               
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between flex-wrap gap-2"> {/* Added flex-wrap and gap */}
                                 <div className="flex items-center space-x-2">
                                   <Badge 
                                     variant="outline" 
@@ -406,8 +482,8 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                                   >
                                     {notification.priority} priority
                                   </Badge>
-                                  <Badge variant="outline">
-                                    {notification.type.replace('_', ' ')}
+                                  <Badge variant="outline" className="capitalize"> {/* Capitalize type display */}
+                                    {notification.type.replace(/_/g, ' ')}
                                   </Badge>
                                 </div>
                                 
@@ -449,7 +525,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                                       }}
                                     >
                                       <ExternalLink className="h-4 w-4 mr-1" />
-                                      View
+                                      View {notification.actionLabel || ""}
                                     </Button>
                                   )}
                                 </div>
@@ -466,7 +542,7 @@ const [leadsPerPage, setLeadsPerPage] = useState(10);
                       <p className="text-gray-600">
                         {filter === 'unread' 
                           ? "You're all caught up! No unread notifications."
-                          : "You don't have any notifications yet."}
+                          : "You don't have any notifications yet for this category."} {/* Improved message */}
                       </p>
                     </div>
                   )}

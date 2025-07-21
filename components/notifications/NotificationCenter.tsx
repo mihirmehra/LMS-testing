@@ -40,14 +40,12 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
   
   const [filter, setFilter] = useState<'all' | 'unread' | 'meetings' | 'tasks'>('all');
 
-  // Fetch notifications when the component mounts or when the center opens/closes if needed
-  // This assumes fetchNotifications is handled internally by useNotifications on mount,
-  // but if you need to re-fetch when opening the panel, uncomment the useEffect below.
-  // useEffect(() => {
-  //   if (open) {
-  //     fetchNotifications(); // Fetch latest notifications when the panel opens
-  //   }
-  // }, [open, fetchNotifications]);
+  // FIX: Uncomment this useEffect to fetch notifications when the component opens
+  useEffect(() => {
+    if (open) {
+      fetchNotifications(); // Fetch latest notifications when the panel opens
+    }
+  }, [open, fetchNotifications]);
 
 
   const filteredNotifications = notifications.filter(notification => {

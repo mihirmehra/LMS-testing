@@ -1,112 +1,110 @@
 // app/api/notifications/devices/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth } from '@/lib/auth/server-utils'; // Centralized auth
+import { verifyAuth } from '@/lib/auth/server-utils';
 import {
-  getDeviceRegistrations,
-  addDeviceRegistration,
-  updateDeviceRegistration,
-  findDeviceByEndpoint
-} from '@/lib/dev-db/push-devices'; // Now uses MongoDB
-import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
+  getDeviceRegistrationsByUserId,
+  addOrUpdateDeviceRegistration, // Still using this one
+} from '@/lib/dev-db/push-devices';
+import { DeviceRegistration } from '@/types/device'; // Import for typing
 
+/**
+ * Handles GET requests to retrieve device registrations for the authenticated user.
+ * Expects a `userId` query parameter which must match the authenticated user's ID.
+ */
 export async function GET(request: NextRequest) {
   try {
-    const decoded = verifyAuth(request); // Authentication check
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId'); // This userId *should* match decoded.userId for security
+    const decoded = verifyAuth(request);
+    if (!decoded || !decoded.userId) {
+        throw new Error('Authentication token invalid or missing userId.');
+    }
 
-    if (!userId) {
+    const { searchParams } = new URL(request.url);
+    const userIdFromQuery = searchParams.get('userId');
+
+    if (!userIdFromQuery) {
       return NextResponse.json(
-        { message: 'User ID is required' },
+        { message: 'User ID is required in query parameters.' },
         { status: 400 }
       );
     }
 
-    // Security check: ensure requested userId matches authenticated user
-    if (userId !== decoded.userId) {
+    if (userIdFromQuery !== decoded.userId) {
       return NextResponse.json(
-        { message: 'Unauthorized: User ID mismatch' },
+        { message: 'Unauthorized: User ID mismatch. Cannot retrieve devices for another user.' },
         { status: 403 }
       );
     }
 
-    // FIX 1: Await getDeviceRegistrations() as it is now async
-    const allDevices = await getDeviceRegistrations(); // <--- AWAIT THIS CALL
-    // Filter devices for the specific user
-    const userDevices = allDevices.filter(device => device.userId === userId);
+    const userDevices = await getDeviceRegistrationsByUserId(decoded.userId);
+
+    if (userDevices.length === 0) {
+      return NextResponse.json(
+        { message: 'No devices registered for this user.', devices: [] },
+        { status: 200 }
+      );
+    }
 
     return NextResponse.json(userDevices);
   } catch (error) {
-    console.error('Get devices error:', error);
-
+    console.error('API GET /notifications/devices error:', error);
     if (error instanceof Error) {
       if (error.message.includes('Authentication required') || error.message.includes('Invalid or expired token')) {
         return NextResponse.json({ message: error.message }, { status: 401 });
       }
-      if (error.message.includes('Unauthorized: User ID mismatch')) {
-        return NextResponse.json({ message: error.message }, { status: 403 });
-      }
     }
-
     return NextResponse.json(
-      { message: 'Internal server error' },
+      { message: 'Failed to retrieve device registrations due to an unexpected server error.' },
       { status: 500 }
     );
   }
 }
 
+/**
+ * Handles POST requests to register (add or update) a device for push notifications.
+ * It expects device information including the push subscription and user ID.
+ */
 export async function POST(request: NextRequest) {
+  let deviceData: Omit<DeviceRegistration, 'id' | 'mongoId' | '_id' | 'createdAt' | 'updatedAt'>;
   try {
-    const decoded = verifyAuth(request); // Authentication check
-    const deviceData = await request.json();
-
-    // Validate device data
-    if (!deviceData.userId || !deviceData.deviceName || !deviceData.pushSubscription || !deviceData.deviceType) {
-      return NextResponse.json(
-        { message: 'Missing required device information (userId, deviceName, pushSubscription, deviceType)' },
-        { status: 400 }
-      );
+    const decoded = verifyAuth(request);
+    if (!decoded || !decoded.userId) {
+        throw new Error('Authentication token invalid or missing userId.');
     }
 
-    // Security check: ensure posted userId matches authenticated user
+    try {
+        deviceData = await request.json();
+    } catch (jsonParseError: any) {
+        console.error('Error parsing request JSON body:', jsonParseError);
+        return NextResponse.json(
+            { message: 'Invalid JSON in request body', error: jsonParseError.message },
+            { status: 400 }
+        );
+    }
+
+    if (!deviceData.userId || !deviceData.subscription || !deviceData.subscription.endpoint) {
+        return NextResponse.json(
+            { message: 'Missing required device registration information: userId, subscription, or subscription.endpoint.' },
+            { status: 400 }
+        );
+    }
+
     if (deviceData.userId !== decoded.userId) {
       return NextResponse.json(
-        { message: 'Unauthorized: User ID mismatch in payload' },
+        { message: 'Unauthorized: User ID mismatch in device data. Cannot register device for another user.' },
         { status: 403 }
       );
     }
 
-    // Check if device already exists by endpoint (endpoint is unique per subscription)
-    // FIX 2: Await findDeviceByEndpoint() as it is now async
-    const existingDevice = await findDeviceByEndpoint(deviceData.pushSubscription.endpoint); // <--- AWAIT THIS CALL
+    // --- Utilize the unified addOrUpdateDeviceRegistration function ---
+    // This function now returns whether a new device was created or an existing one was updated.
+    const { device: registeredDevice, created: wasNewDeviceCreated } = await addOrUpdateDeviceRegistration(deviceData); // <--- MODIFIED
 
-    if (existingDevice) {
-      // Update existing device
-      existingDevice.lastUsed = new Date();
-      existingDevice.isActive = true;
-      existingDevice.deviceName = deviceData.deviceName; // Allow updating name
-      existingDevice.deviceType = deviceData.deviceType; // Allow updating type
-      // FIX 3: Await updateDeviceRegistration() as it is now async
-      await updateDeviceRegistration(existingDevice); // <--- AWAIT THIS CALL
-      return NextResponse.json(existingDevice);
-    }
+    // Return different status codes based on whether a new device was created or an existing one updated
+    const status = wasNewDeviceCreated ? 201 : 200; // 201 Created for new, 200 OK for update
 
-    // Add new device
-    const newDevice = {
-      id: uuidv4(), // Generate unique ID for the device
-      ...deviceData,
-      registeredAt: new Date(),
-      lastUsed: new Date(),
-      isActive: true, // Mark as active when registered
-    };
-
-    // FIX 4: Await addDeviceRegistration() as it is now async
-    await addDeviceRegistration(newDevice); // <--- AWAIT THIS CALL
-
-    return NextResponse.json(newDevice, { status: 201 });
+    return NextResponse.json(registeredDevice, { status: status }); // <--- MODIFIED
   } catch (error) {
-    console.error('Register device error:', error);
-
+    console.error('API POST /notifications/devices error:', error);
     if (error instanceof Error) {
       if (error.message.includes('Authentication required') || error.message.includes('Invalid or expired token')) {
         return NextResponse.json({ message: error.message }, { status: 401 });
@@ -114,10 +112,12 @@ export async function POST(request: NextRequest) {
       if (error.message.includes('Unauthorized: User ID mismatch')) {
         return NextResponse.json({ message: error.message }, { status: 403 });
       }
+      if (error.message.includes('subscription endpoint is required')) {
+        return NextResponse.json({ message: error.message }, { status: 400 });
+      }
     }
-
     return NextResponse.json(
-      { message: 'Internal server error' },
+      { message: 'Failed to register/update device due to an unexpected server error.' },
       { status: 500 }
     );
   }

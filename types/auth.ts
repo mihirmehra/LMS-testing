@@ -21,6 +21,8 @@ export interface UserPreferences {
     push: boolean;
     leadUpdates: boolean;
     taskReminders: boolean;
+    meetingReminders?: boolean;
+    systemAlerts?: boolean;  
   };
   dashboard: {
     defaultView: 'leads' | 'analytics' | 'calendar';

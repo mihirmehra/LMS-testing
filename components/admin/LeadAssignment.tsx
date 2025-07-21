@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useLeads } from '@/hooks/useLeads';
 import { Lead } from '@/types/lead';
 import { useNotifications } from '@/hooks/useNotifications';
-import { useAuth } from '@/hooks/useAuth'; // <--- IMPORT YOUR useAuth HOOK HERE!
+import { useAuth } from '@/hooks/useAuth';
 import {
   Users,
   UserPlus,
@@ -30,8 +30,8 @@ interface LeadAssignmentProps {
 }
 
 export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
-  const { user, isLoading: authLoading } = useAuth(); // <--- USE YOUR useAuth HOOK HERE!
-  const currentUserId = user?.id; // <--- GET THE CURRENT USER'S ID FROM YOUR AUTH STATE
+  const { user, isLoading: authLoading } = useAuth();
+  const currentUserId = user?.id;
 
   const { leads, updateLead, fetchLeads } = useLeads();
   const { createNotification } = useNotifications();
@@ -43,7 +43,6 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('unassigned');
-
 
   useEffect(() => {
     fetchLeads();
@@ -118,16 +117,15 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
       setMessage({ type: 'error', text: 'Please select an agent' });
       return;
     }
-    // Check if currentUserId is available before proceeding, especially for notifications
     if (!currentUserId) {
-        setMessage({ type: 'error', text: 'Authentication error: Current user ID not available. Please log in again.' });
-        console.error('Authentication error: Current user ID is null/undefined.');
-        return;
+      setMessage({ type: 'error', text: 'Authentication error: Current user ID not available. Please log in again.' });
+      console.error('Authentication error: Current user ID is null/undefined.');
+      return;
     }
 
     setLoading(true);
     const agentName = getAgentName(selectedAgent);
-    const assignedAgentId = selectedAgent;
+    const assignedAgentId = selectedAgent; // This is the userId of the agent to whom leads are assigned
 
     try {
       for (const leadId of selectedLeads) {
@@ -136,19 +134,34 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
 
       setMessage({
         type: 'success',
-        text: `Successfully assigned ${selectedLeads.length} lead(s) to agent`
+        text: `Successfully assigned ${selectedLeads.length} lead(s) to ${agentName}.`
       });
 
-      // Notification for the ASSIGNED AGENT
+      // --- IMPORTANT CHANGE HERE: Send notification to the ASSIGNED AGENT ---
       await createNotification({
-        userId: assignedAgentId, // Target the assigned agent
-        title: 'New Lead Assignment!',
-        message: `${selectedLeads.length} lead(s) have been assigned to you.`,
-        type: 'lead_assignment',
-        priority: 'high',
-        actionUrl: '/leads',
-        actionLabel: 'View Assigned Leads'
+        userId: assignedAgentId, // Target the assigned agent's userId
+        title: 'New Leads Assigned!',
+        message: `You have been assigned ${selectedLeads.length} new lead(s). Check your leads for details!`,
+        type: 'lead_assignment', // Use a specific type for lead assignment notifications
+        priority: 'high', // Mark as high priority
+        actionUrl: '/leads', // Link to the leads page for the agent
+        actionLabel: 'View Assigned Leads',
+        // --- This next property is CONCEPTUAL for push notifications ---
+        // If your createNotification and backend support it, you'd pass a flag/token
+        // isPush: true, 
+        // pushToken: agent.pushNotificationToken // assuming you fetch this with agent data
       });
+
+      // Optional: If you still want the admin to get a confirmation toast/notification
+      // This is primarily for the admin's immediate feedback on their action
+      await createNotification({
+        userId: currentUserId, // Target the admin who performed the action
+        title: 'Lead Assignment Successful',
+        message: `You have successfully assigned ${selectedLeads.length} lead(s) to ${agentName}.`,
+        type: 'system_alert',
+        priority: 'low',
+      });
+
 
       setSelectedLeads([]);
       setSelectedAgent('');
@@ -223,7 +236,7 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
           </Badge>
           <Button
             onClick={handleBulkAssign}
-            disabled={selectedLeads.length === 0 || authLoading || !currentUserId} // Disable if auth is loading or no user ID
+            disabled={selectedLeads.length === 0 || authLoading || !currentUserId}
             className="bg-green-600 hover:bg-green-700"
           >
             <UserPlus className="h-4 w-4 mr-2" />
@@ -427,7 +440,7 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
             </Button>
             <Button
               onClick={handleAssignLeads}
-              disabled={loading || !selectedAgent || selectedAgent === "none" || authLoading || !currentUserId} // Add disable conditions
+              disabled={loading || !selectedAgent || selectedAgent === "none" || authLoading || !currentUserId}
               className="bg-green-600 hover:bg-green-700"
             >
               {loading ? (
