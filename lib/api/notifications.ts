@@ -1,3 +1,5 @@
+// lib/notification.ts
+
 import { getDatabase } from '@/lib/mongodb';
 import { Notification } from '@/types/notification';
 import { ObjectId } from 'mongodb';
@@ -11,21 +13,34 @@ export class NotificationsAPI {
   static async getUserNotifications(userId: string): Promise<Notification[]> {
     try {
       const collection = await this.getCollection();
-      const notifications = await collection
+      // Fetch documents from MongoDB. They will contain _id (ObjectId) and date fields as Date objects.
+      const notificationsFromDb = await collection
         .find({ userId })
         .sort({ createdAt: -1 })
         .limit(50)
         .toArray();
       
-      return notifications.map(notification => {
-        const { _id, ...rest } = notification;
-        return {
-          ...rest,
-          id: _id.toString(),
-          createdAt: new Date(notification.createdAt),
-          scheduledFor: notification.scheduledFor ? new Date(notification.scheduledFor) : undefined,
+      // Explicitly map each document to the Notification interface, handling type conversions.
+      return notificationsFromDb.map(doc => {
+        // Ensure all required properties are present and correctly typed.
+        // Convert Date objects from DB to ISO strings to match Notification type (string).
+        const notification: Notification = {
+          id: doc._id.toString(), // Convert ObjectId to string for 'id'
+          userId: doc.userId,
+          type: doc.type,
+          title: doc.title,
+          message: doc.message,
+          priority: doc.priority,
+          read: doc.read,
+          createdAt: new Date(doc.createdAt).toISOString(), // Convert Date to ISO string
+          scheduledFor: doc.scheduledFor ? new Date(doc.scheduledFor).toISOString() : undefined, // Convert Date to ISO string or undefined
+          // Include optional properties if they exist, otherwise undefined
+          data: doc.data || undefined,
+          actionUrl: doc.actionUrl || undefined,
+          actionLabel: doc.actionLabel || undefined,
         };
-      }) as Notification[];
+        return notification;
+      }); // No need for 'as Notification[]' cast if each object is correctly built
     } catch (error) {
       console.error('Error fetching notifications:', error);
       return [];
@@ -40,7 +55,8 @@ export class NotificationsAPI {
       const newNotification = {
         ...notificationData,
         read: false,
-        createdAt: now,
+        // Ensure createdAt is an ISO string for insertion to match Notification type
+        createdAt: now.toISOString(),
       };
 
       const result = await collection.insertOne(newNotification);
@@ -122,7 +138,7 @@ export class NotificationsAPI {
     userId: string, 
     eventId: string, 
     eventTitle: string, 
-    startTime: Date,
+    startTime: Date, 
     reminderMinutes: number = 30
   ): Promise<Notification | null> {
     try {
@@ -135,17 +151,17 @@ export class NotificationsAPI {
 
       return await this.createNotification({
         userId,
-        type: 'task_reminder',
+        type: 'task_reminder', 
         title: 'Upcoming Meeting',
         message: `Meeting "${eventTitle}" starts in ${reminderMinutes} minutes`,
         priority: 'high',
         data: {
           eventId,
           eventTitle,
-          startTime: startTime.toISOString(),
+          startTime: startTime.toISOString(), 
           reminderMinutes,
         },
-        scheduledFor: reminderTime,
+        scheduledFor: reminderTime.toISOString(), // Convert Date to ISO string
         actionUrl: '/calendar',
         actionLabel: 'View Calendar',
       });
@@ -187,7 +203,7 @@ export class NotificationsAPI {
     userId: string,
     taskId: string,
     taskTitle: string,
-    dueDate: Date
+    dueDate: Date 
   ): Promise<Notification | null> {
     try {
       const now = new Date();
@@ -214,7 +230,7 @@ export class NotificationsAPI {
         data: {
           taskId,
           taskTitle,
-          dueDate: dueDate.toISOString(),
+          dueDate: dueDate.toISOString(), 
         },
         actionUrl: '/tasks',
         actionLabel: 'View Tasks',
