@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
-    "target": "es5",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "target": "es2017", // or "es2018", "es2019", "es2020", "esnext"
+    "lib": ["dom", "dom.iterable", "esnext"], // ensure 'esnext' is included
+    "downlevelIteration": true, // Explicitly enable if target is older than es2015, but es2017+ usually handles this
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,

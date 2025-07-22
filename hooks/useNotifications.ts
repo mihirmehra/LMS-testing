@@ -2,6 +2,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Notification } from '@/types/notification';
+// Import the push notification utility (assuming this is where your FCM client logic resides)
+import { subscribeToPush, onPushMessageReceived } from '@/lib/client/pushNotifications';
+import { useAuth } from './useAuth'; // Assuming you can get the current user from useAuth
 
 interface CreateNotificationPayload {
   userId: string;
@@ -14,6 +17,9 @@ interface CreateNotificationPayload {
 }
 
 export function useNotifications() {
+  const { user, isLoading: authLoading } = useAuth(); // Get current user from useAuth
+  const currentUserId = user?.id; // Get the ID of the currently logged-in user
+
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false); // Manages loading state for all operations
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +36,13 @@ export function useNotifications() {
       }
 
       // If userId is provided, fetch for that user, otherwise assume current logged-in user (backend handles it)
-      const url = userId ? `/api/notifications?userId=${userId}` : '/api/notifications';
+      const targetUserId = userId || currentUserId; // Use provided userId or current logged-in user's ID
+      if (!targetUserId) {
+          console.warn('Cannot fetch notifications: No user ID available.');
+          return;
+      }
+
+      const url = `/api/notifications?userId=${targetUserId}`; // Explicitly send userId to backend for fetching
       const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`, // Assuming auth token is used
@@ -59,17 +71,61 @@ export function useNotifications() {
     } finally {
       setLoading(false); // Always set loading to false when done
     }
-  }, []); // Dependencies: None, as userId is passed as an argument or implied for current user
+  }, [currentUserId]); // Dependency on currentUserId to re-fetch if user changes
+
+  // Initialize Firebase Push Notifications and listen for foreground messages
+  useEffect(() => {
+    if (currentUserId && !authLoading) {
+      // 1. Setup Firebase messaging, request permission, get token, and send to backend
+      subscribeToPush(currentUserId);
+
+      // 2. Subscribe to foreground messages and update in-app notifications
+      const unsubscribe = onPushMessageReceived((payload) => {
+        console.log('Foreground FCM Message received in useNotifications hook:', payload);
+        // Add the new notification to the state for immediate display
+        // You might need to transform the FCM payload to your Notification type
+        const newInAppNotification: Notification = {
+          id: payload.data?.notificationId || Date.now().toString(), // Use actual ID from payload if available, else generate
+          userId: payload.data?.userId || currentUserId,
+          title: payload.notification?.title || 'New Message',
+          message: payload.notification?.body || 'You have a new notification.',
+          type: (payload.data?.type as Notification['type']) || 'general',
+          priority: (payload.data?.priority as Notification['priority']) || 'normal',
+          read: false, // Newly received notifications are unread
+          createdAt: new Date().toISOString(), // Use current time or payload's timestamp if available
+          actionUrl: payload.data?.actionUrl,
+          actionLabel: payload.data?.actionLabel,
+        };
+
+        setNotifications(prev => [newInAppNotification, ...prev].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+
+        // Optionally, you can also trigger a visual toast/alert here using a global toast system
+        // e.g., if you have a `useToast` hook or similar
+        // import { toast } from '@/components/ui/use-toast'; // Example toast import
+        // toast({
+        //   title: newInAppNotification.title,
+        //   description: newInAppNotification.message,
+        //   // action: <ToastAction altText="View">View</ToastAction>, // If your toast supports actions
+        // });
+      });
+
+      // Cleanup subscription on component unmount
+      return () => {
+        if (unsubscribe) {
+          unsubscribe();
+        }
+      };
+    }
+  }, [currentUserId, authLoading]); // Re-run when current user changes or auth state resolves
 
   // This useEffect ensures fetchNotifications is called automatically when the hook mounts.
   // This is crucial for NotificationsPage to get its initial data.
-  // It runs once on mount and then whenever the fetchNotifications function itself changes
-  // (which, because it's wrapped in useCallback with no dependencies, means it's stable).
   useEffect(() => {
-    // We pass undefined for userId here, indicating it should fetch for the current logged-in user
-    // as per your current API design for '/api/notifications' endpoint.
-    fetchNotifications();
-  }, [fetchNotifications]); // Dependency: fetchNotifications to ensure it runs when the function reference is stable
+    // Only fetch notifications if the user is logged in and auth is not loading
+    if (currentUserId && !authLoading) {
+      fetchNotifications();
+    }
+  }, [fetchNotifications, currentUserId, authLoading]); // Add currentUserId and authLoading to dependencies
 
   const createNotification = useCallback(
     async (payload: CreateNotificationPayload) => {
@@ -81,6 +137,7 @@ export function useNotifications() {
             throw new Error('Authentication token not found. Please log in.');
         }
 
+        // Send notification data to your backend API
         const response = await fetch('/api/notifications/', {
           method: 'POST',
           headers: {
@@ -169,9 +226,11 @@ export function useNotifications() {
       console.error('Error marking all notifications as read:', err);
       setError(err.message || 'An unexpected error occurred while marking all as read');
       // If error, you might want to re-fetch to ensure state consistency
-      fetchNotifications();
+      if (currentUserId) { // Only re-fetch if a user ID is available
+          fetchNotifications(currentUserId);
+      }
     }
-  }, [fetchNotifications]); // Dependency on fetchNotifications to re-fetch on error
+  }, [fetchNotifications, currentUserId]); // Dependency on fetchNotifications and currentUserId to re-fetch on error
 
   const deleteNotification = useCallback(async (notificationId: string) => {
     try {
@@ -198,9 +257,11 @@ export function useNotifications() {
       console.error('Error deleting notification:', err);
       setError(err.message || 'An unexpected error occurred while deleting');
       // If error, re-fetch to ensure state consistency
-      fetchNotifications();
+      if (currentUserId) { // Only re-fetch if a user ID is available
+          fetchNotifications(currentUserId);
+      }
     }
-  }, [fetchNotifications]); // Dependency on fetchNotifications to re-fetch on error
+  }, [fetchNotifications, currentUserId]); // Dependency on fetchNotifications and currentUserId to re-fetch on error
 
   return {
     notifications,

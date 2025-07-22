@@ -43,7 +43,6 @@
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.2",
     "@types/node": "20.6.2",
-    "@types/react": "18.2.22",
     "@types/react-dom": "18.2.7",
     "ajv": "^8.17.1",
     "ajv-errors": "^3.0.0",
@@ -97,7 +96,10 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.5",
+    "@types/mongodb": "^4.0.6",
     "@types/papaparse": "^5.3.16",
+    "@types/react": "^18.2.7",
+    "@types/react-dom": "18.2.7",
     "@types/uuid": "^10.0.0",
     "@types/web-push": "^3.6.4",
     "computed-types": "^1.11.2"

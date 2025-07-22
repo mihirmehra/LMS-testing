@@ -1,14 +1,15 @@
+// types/notification.ts
 export interface Notification {
   id: string;
   userId: string;
-  type: 'meeting_reminder' | 'reminder' | 'lead_update' | 'task_reminder' | 'system_alert' | 'calendar_event' | 'lead_assignment';
+  type: 'meeting_reminder' | 'reminder' | 'lead_update' | 'task_reminder' | 'system_alert' | 'calendar_event' | 'lead_assignment' | 'general' | 'error'; // Added 'general' as a common fallback
   title: string;
   message: string;
   data?: Record<string, any>;
   read: boolean;
   priority: 'low' | 'medium' | 'high';
-  createdAt: Date;
-  scheduledFor?: Date;
+  createdAt: string; // <-- CHANGE THIS FROM Date TO string
+  scheduledFor?: string; // <-- Change this to string as well if you store it as ISO string
   actionUrl?: string;
   actionLabel?: string;
 }

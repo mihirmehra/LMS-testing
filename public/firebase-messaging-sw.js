@@ -11,13 +11,14 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-com
 // These values MUST match the ones you use in lib/client/pushNotifications.ts
 // Replace with your actual environment variables (they must be hardcoded here for the SW).
 const firebaseConfig = {
-  apiKey: "YOUR_NEXT_PUBLIC_FIREBASE_API_KEY",
-  authDomain: "YOUR_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
-  projectId: "YOUR_NEXT_PUBLIC_FIREBASE_PROJECT_ID",
-  storageBucket: "YOUR_NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
-  appId: "YOUR_NEXT_PUBLIC_FIREBASE_APP_ID",
-  measurementId: "YOUR_NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID" // Optional
+  // *** IMPORTANT: REPLACE THESE WITH YOUR ACTUAL VALUES FROM .env.local ***
+  apiKey: "AIzaSyBMj91MMojzomwaLsNA1JOhjzveHbF2w5Q", // YOUR_NEXT_PUBLIC_FIREBASE_API_KEY
+  authDomain: "lms-realestate.firebaseapp.com",     // YOUR_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+  projectId: "lms-realestate",                       // YOUR_NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  storageBucket: "lms-realestate.firebasestorage.app", // YOUR_NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+  messagingSenderId: "776687413506",                 // YOUR_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+  appId: "1:776687413506:web:28848cd930fd7f8aa5ba1b", // YOUR_NEXT_PUBLIC_FIREBASE_APP_ID
+  // measurementId: "YOUR_NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID" // Optional, if you have it
 };
 
 // Initialize Firebase App within the Service Worker
@@ -57,6 +58,7 @@ self.addEventListener('notificationclick', (event) => {
   clickedNotification.close(); // Close the notification
 
   // Check if a custom action URL was provided in the notification data
+  // FCM 'data' field is directly accessible here.
   const actionUrl = event.notification.data?.actionUrl || '/'; // Default to homepage
 
   event.waitUntil(

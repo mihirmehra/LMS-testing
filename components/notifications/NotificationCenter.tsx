@@ -1,3 +1,5 @@
+// components/notification/NotificationCenter.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,17 +10,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Notification } from '@/types/notification'; // Ensure this path is correct
 import { useNotifications } from '@/hooks/useNotifications'; // Ensure this path is correct
-import { 
-  Bell, 
-  Calendar, 
-  CheckCircle2, 
-  Clock, 
-  Trash2, 
-  User, 
+import {
+  Bell,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Trash2,
+  User,
   Settings,
   Check,
   ExternalLink,
-  Loader2 // Added for loading indicator
+  Loader2, // Added for loading indicator
+  // --- ADD AlertTriangle or similar icon for errors ---
+  AlertTriangle // You might need to import this from 'lucide-react'
 } from 'lucide-react';
 
 interface NotificationCenterProps {
@@ -27,17 +31,17 @@ interface NotificationCenterProps {
 }
 
 export function NotificationCenter({ open, onOpenChange }: NotificationCenterProps) {
-  const { 
-    notifications, 
-    unreadCount, 
-    markAsRead, 
-    markAllAsRead, 
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
     deleteNotification,
     loading: notificationsLoading, // Renamed to avoid confusion with local 'loading' state if any
     error: notificationsError, // Added error state from hook
     fetchNotifications // Assuming your hook provides a way to refetch
   } = useNotifications();
-  
+
   const [filter, setFilter] = useState<'all' | 'unread' | 'meetings' | 'tasks'>('all');
 
   // FIX: Uncomment this useEffect to fetch notifications when the component opens
@@ -71,10 +75,14 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
       case 'task_reminder':
         return <Clock className="h-4 w-4 text-amber-600" />;
       case 'lead_update':
-      case 'lead_assignment': // Added lead_assignment
+      case 'lead_assignment':
         return <User className="h-4 w-4 text-green-600" />;
       case 'system_alert':
         return <Settings className="h-4 w-4 text-red-600" />;
+      // --- START OF SUGGESTED ADDITION ---
+      case 'error': // Handle the new 'error' type
+        return <AlertTriangle className="h-4 w-4 text-rose-500" />; // Or any other suitable icon/color
+      // --- END OF SUGGESTED ADDITION ---
       default:
         return <Bell className="h-4 w-4 text-gray-600" />;
     }
@@ -93,9 +101,8 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
     }
   };
 
-  // Improved formatTime function for better readability and accuracy
-  const formatTime = (dateString: Date) => {
-    const date = new Date(dateString); // Ensure it's a Date object
+  const formatTime = (dateInput: string | Date) => {
+    const date = new Date(dateInput);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
 
@@ -103,8 +110,8 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    const months = Math.floor(days / 30); // Approximate months
-    const years = Math.floor(days / 365); // Approximate years
+    const months = Math.floor(days / 30);
+    const years = Math.floor(days / 365);
 
     if (years > 0) return `${years}y ago`;
     if (months > 0) return `${months}mo ago`;
@@ -119,23 +126,21 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
       markAsRead(notification.id);
     }
 
-    // Navigate to related content if actionUrl exists
     if (notification.actionUrl) {
-      // Using window.location.assign or a router push would be better for SPAs
-      window.location.href = notification.actionUrl; 
+      window.location.href = notification.actionUrl;
     }
   };
 
-  if (!open) return null; // Render nothing if not open
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/20" onClick={() => onOpenChange(false)}>
-      <div 
+      <div
         className="fixed right-0 top-0 h-full w-96 bg-white shadow-xl border-l border-gray-200 transform transition-transform duration-300 ease-in-out"
-        onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
+        onClick={(e) => e.stopPropagation()}
       >
-        <Card className="h-full border-0 rounded-none flex flex-col"> {/* Added flex-col for layout */}
-          <CardHeader className="border-b border-gray-200 flex-shrink-0"> {/* flex-shrink-0 to keep header fixed */}
+        <Card className="h-full border-0 rounded-none flex flex-col">
+          <CardHeader className="border-b border-gray-200 flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center space-x-2">
                 <Bell className="h-5 w-5 text-blue-600" />
@@ -155,7 +160,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                 ×
               </Button>
             </div>
-            
+
             <div className="flex items-center justify-between mt-4">
               <Select value={filter} onValueChange={(value: any) => setFilter(value)}>
                 <SelectTrigger className="w-32">
@@ -168,7 +173,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                   <SelectItem value="tasks">Tasks & Reminders</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               {unreadCount > 0 && (
                 <Button
                   variant="outline"
@@ -183,8 +188,8 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
             </div>
           </CardHeader>
 
-          <CardContent className="p-0 flex-grow"> {/* flex-grow to take remaining space */}
-            <ScrollArea className="h-full"> {/* Make ScrollArea fill available height */}
+          <CardContent className="p-0 flex-grow">
+            <ScrollArea className="h-full">
               {notificationsLoading ? (
                 <div className="flex flex-col items-center justify-center py-8 text-gray-500">
                   <Loader2 className="h-6 w-6 animate-spin mb-2" />
@@ -196,7 +201,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                     <h3 className="text-lg font-medium mb-2">Error loading notifications</h3>
                     <p className="text-sm">{notificationsError}</p>
                     <Button onClick={() => fetchNotifications()} variant="outline" className="mt-4">
-                        Retry
+                      Retry
                     </Button>
                 </div>
               ) : filteredNotifications.length > 0 ? (
@@ -213,7 +218,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                         <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
                           {getNotificationIcon(notification.type)}
                         </div>
-                        
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
                             <h4 className="text-sm font-medium text-gray-900 truncate">
@@ -223,15 +228,15 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                               <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
                             )}
                           </div>
-                          
+
                           <p className="text-sm text-gray-600 mb-2 line-clamp-2">
                             {notification.message}
                           </p>
-                          
+
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2">
-                              <Badge 
-                                variant="outline" 
+                              <Badge
+                                variant="outline"
                                 className={`text-xs ${getPriorityColor(notification.priority)}`}
                               >
                                 {notification.priority}
@@ -240,14 +245,14 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                                 {formatTime(notification.createdAt)}
                               </span>
                             </div>
-                            
+
                             <div className="flex items-center space-x-1">
                               {!notification.read && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={(e) => {
-                                    e.stopPropagation(); // Prevent parent div's click
+                                    e.stopPropagation();
                                     markAsRead(notification.id);
                                   }}
                                   className="h-6 w-6 p-0 text-gray-400 hover:text-blue-600"
@@ -256,12 +261,12 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                                   <CheckCircle2 className="h-3 w-3" />
                                 </Button>
                               )}
-                              
+
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={(e) => {
-                                  e.stopPropagation(); // Prevent parent div's click
+                                  e.stopPropagation();
                                   deleteNotification(notification.id);
                                 }}
                                 className="h-6 w-6 p-0 text-gray-400 hover:text-red-600"
@@ -269,13 +274,13 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
-                              
+
                               {notification.actionUrl && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={(e) => {
-                                    e.stopPropagation(); // Prevent parent div's click
+                                    e.stopPropagation();
                                     window.location.href = notification.actionUrl!;
                                   }}
                                   className="h-6 w-6 p-0 text-gray-400 hover:text-blue-600"
@@ -296,7 +301,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                   <Bell className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications</h3>
                   <p className="text-gray-600">
-                    {filter === 'unread' 
+                    {filter === 'unread'
                       ? "You're all caught up! No unread notifications."
                       : "You don't have any notifications matching this filter."}
                   </p>

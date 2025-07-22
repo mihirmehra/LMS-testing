@@ -3,7 +3,7 @@
 
 import { Collection, ObjectId, Document } from 'mongodb';
 import { getDatabase } from '@/lib/mongodb';
-import { DeviceRegistration, PushSubscription } from '@/types/device';
+import { DeviceRegistration } from '@/types/device'; // Only DeviceRegistration is needed now
 
 const COLLECTION_NAME = 'device_registrations';
 
@@ -26,47 +26,51 @@ function mapToDeviceRegistration(doc: Document | null): DeviceRegistration {
     mongoId: doc._id.toHexString(),
     createdAt: (doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt) as string,
     updatedAt: (doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt) as string,
+    fcmToken: doc.fcmToken as string, // Ensure fcmToken is mapped
   };
   delete (mappedDoc as any)._id;
+  // Delete the old subscription field if it still exists in some documents
+  delete (mappedDoc as any).subscription; 
   return mappedDoc;
 }
 
 /**
- * Adds a new device registration or updates an existing one if the endpoint already exists for the user.
+ * Adds a new device registration or updates an existing one if the FCM token already exists for the user.
  * This function handles idempotency for device registration.
  *
  * @param deviceData - The partial device registration data to add or update.
  * @returns A Promise that resolves to an object containing the DeviceRegistration and a boolean
  * indicating if a new device was created (`created: true`) or an existing one was updated (`created: false`).
- * @throws Error if subscription endpoint is missing or if database operations fail.
+ * @throws Error if fcmToken is missing or if database operations fail.
  */
 export async function addOrUpdateDeviceRegistration(
   deviceData: Omit<DeviceRegistration, 'id' | 'mongoId' | '_id' | 'createdAt' | 'updatedAt'>
-): Promise<{ device: DeviceRegistration; created: boolean }> { // <--- MODIFIED RETURN TYPE
+): Promise<{ device: DeviceRegistration; created: boolean }> {
   const collection = await getDeviceCollection();
   const now = new Date();
 
-  if (!deviceData.subscription || !deviceData.subscription.endpoint) {
-    throw new Error('Device subscription endpoint is required for registration.');
+  if (!deviceData.fcmToken) { // Check for fcmToken instead of subscription
+    throw new Error('Device FCM token is required for registration.');
   }
 
+  // Find existing device by userId and fcmToken
   const existingDevice = await collection.findOne({
     userId: deviceData.userId,
-    'subscription.endpoint': deviceData.subscription.endpoint,
+    fcmToken: deviceData.fcmToken,
   });
 
   let finalRawDoc: Document | null = null;
-  let wasCreated = false; // Flag to indicate if a new device was created
+  let wasCreated = false;
 
   if (existingDevice) {
-    console.log(`Found existing device for user ${deviceData.userId} with endpoint ${deviceData.subscription.endpoint}. Updating...`);
+    console.log(`Found existing device for user ${deviceData.userId} with FCM token ${deviceData.fcmToken}. Updating...`);
     await collection.updateOne(
       { _id: existingDevice._id },
       {
         $set: {
           deviceName: deviceData.deviceName,
           deviceType: deviceData.deviceType,
-          subscription: deviceData.subscription,
+          fcmToken: deviceData.fcmToken, // Update FCM token
           isActive: true,
           updatedAt: now,
         },
@@ -78,9 +82,9 @@ export async function addOrUpdateDeviceRegistration(
       throw new Error('Failed to retrieve updated device document after update operation.');
     }
     console.log(`Updated device registration: ${mapToDeviceRegistration(finalRawDoc).id}`);
-    wasCreated = false; // It was an update
+    wasCreated = false;
   } else {
-    console.log(`No existing device found for user ${deviceData.userId} with endpoint ${deviceData.subscription.endpoint}. Adding new...`);
+    console.log(`No existing device found for user ${deviceData.userId} with FCM token ${deviceData.fcmToken}. Adding new...`);
     const docToInsert: Document = {
       ...deviceData,
       createdAt: now,
@@ -98,7 +102,7 @@ export async function addOrUpdateDeviceRegistration(
       throw new Error('Failed to retrieve newly inserted device document after insertion.');
     }
     console.log(`Added new device registration: ${mapToDeviceRegistration(finalRawDoc).id}`);
-    wasCreated = true; // It was a new creation
+    wasCreated = true;
   }
 
   return {
@@ -107,10 +111,6 @@ export async function addOrUpdateDeviceRegistration(
   };
 }
 
-// Keep all other functions (getDeviceRegistrationsByUserId, getDeviceRegistrationById, updateDeviceRegistration, deleteDeviceRegistration, findDeviceByEndpoint) as they were in the previous complete file.
-// I'm omitting them here for brevity, but they should remain in your push-devices.ts file.
-
-// lib/dev-db/push-devices.ts (Continuation of previous functions)
 /**
  * Retrieves all active device registrations for a specific user.
  * @param userId - The ID of the user whose devices to retrieve.
@@ -162,7 +162,7 @@ export async function updateDeviceRegistration(device: DeviceRegistration): Prom
         userId: device.userId,
         deviceName: device.deviceName,
         deviceType: device.deviceType,
-        subscription: device.subscription,
+        fcmToken: device.fcmToken, // Update FCM token
         isActive: device.isActive,
         updatedAt: new Date(),
       }
@@ -186,16 +186,17 @@ export async function deleteDeviceRegistration(deviceId: string): Promise<boolea
   return result.deletedCount > 0;
 }
 
-/**
- * Finds a device registration by its push subscription endpoint.
- * @param endpoint - The unique endpoint URL of the push subscription.
- * @returns A Promise that resolves to the DeviceRegistration object if found, otherwise null.
- */
-export async function findDeviceByEndpoint(endpoint: string): Promise<DeviceRegistration | null> {
-  const collection = await getDeviceCollection();
-  const rawDoc = await collection.findOne({ 'subscription.endpoint': endpoint });
-  if (rawDoc) {
-    return mapToDeviceRegistration(rawDoc);
-  }
-  return null;
-}
+// Removed findDeviceByEndpoint as it's no longer relevant for FCM
+// /**
+//  * Finds a device registration by its push subscription endpoint.
+//  * @param endpoint - The unique endpoint URL of the push subscription.
+//  * @returns A Promise that resolves to the DeviceRegistration object if found, otherwise null.
+//  */
+// export async function findDeviceByEndpoint(endpoint: string): Promise<DeviceRegistration | null> {
+//   const collection = await getDeviceCollection();
+//   const rawDoc = await collection.findOne({ 'subscription.endpoint': endpoint });
+//   if (rawDoc) {
+//     return mapToDeviceRegistration(rawDoc);
+//   }
+//   return null;
+// }

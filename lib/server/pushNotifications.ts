@@ -1,98 +1,100 @@
-// lib/server/pushNotifications.ts (Server-side)
-// This file handles sending push notifications using Firebase Admin SDK.
+// lib/server/pushNotifications.ts
+import { messagingAdmin } from '@/lib/firebase/admin-sdk';
+import * as admin from 'firebase-admin'; // Import 'firebase-admin' for type definitions, including admin.FirebaseError
 
-import * as admin from 'firebase-admin';
-
-// Define a type for a generic Firebase-like error, including common properties.
-interface FirebaseErrorLike {
-  code?: string;
-  message: string;
-  stack?: string;
-  [key: string]: any;
+interface NotificationPayload {
+  title: string;
+  body: string;
+  imageUrl?: string;
 }
 
-// Define a type for the response of a single message send for consistency.
-interface SingleMessageSendResponse {
+interface DataPayload {
+  [key: string]: string;
+}
+
+interface FCMSendResponse {
   successCount: number;
   failureCount: number;
-  results: { messageId?: string; error?: FirebaseErrorLike }[];
-}
-
-// Initialize Firebase Admin SDK if not already initialized
-if (!admin.apps.length) {
-  try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY!);
-
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-    console.log("Firebase Admin SDK initialized successfully.");
-  } catch (error) {
-    console.error("Failed to initialize Firebase Admin SDK:", error);
-    console.error("Please ensure FIREBASE_SERVICE_ACCOUNT_KEY environment variable is correctly set.");
-  }
+  responses: Array<{ success: boolean; messageId?: string; error?: admin.FirebaseError }>;
 }
 
 /**
- * Sends a push notification to a specific device or a list of devices.
- * @param token The FCM registration token of the device. Can be a single token or an array of tokens.
- * @param notification The notification payload (title, body, etc.).
- * @param data Optional data payload.
- * @returns A Promise resolving to admin.messaging.BatchResponse for multiple tokens,
- * or SingleMessageSendResponse for a single token (custom defined).
+ * Sends FCM notifications to multiple devices using sendEachForMulticast.
+ * This function can be used for broadcasting or sending to a group of users efficiently.
+ * @param fcmTokens An array of FCM registration tokens.
+ * @param notificationPayload The notification object (title, body, imageUrl).
+ * @param dataPayload Optional data payload (custom key-value pairs, all values as strings).
+ * @returns A Promise that resolves to an FCMSendResponse detailing success/failure counts and individual responses.
  */
-export async function sendPushNotification(
-  token: string | string[],
-  notification: { title: string; body: string; imageUrl?: string },
-  data?: { [key: string]: string },
-): Promise<admin.messaging.BatchResponse | SingleMessageSendResponse> {
+export async function sendFCMNotifications(
+  fcmTokens: string[],
+  notificationPayload: NotificationPayload,
+  dataPayload?: DataPayload
+): Promise<FCMSendResponse> {
+  if (fcmTokens.length === 0) {
+    console.log('No FCM tokens provided to send notifications to.');
+    return { successCount: 0, failureCount: 0, responses: [] };
+  }
 
-  const notificationPayload = {
-    title: notification.title,
-    body: notification.body,
-    imageUrl: notification.imageUrl,
+  if (!messagingAdmin) {
+    console.error('Firebase Messaging Admin SDK is not available. This indicates a prior initialization failure.');
+    throw new Error('Firebase Admin SDK is not initialized. Check your lib/firebase/admin-sdk.ts for initialization errors.');
+  }
+
+  // CORRECTED: Construct a single MulticastMessage object
+  const multicastMessage: admin.messaging.MulticastMessage = {
+    tokens: fcmTokens, // Array of tokens goes here
+    notification: {
+      title: notificationPayload.title,
+      body: notificationPayload.body,
+      imageUrl: notificationPayload.imageUrl,
+    },
+    data: dataPayload || {}, // Ensure 'data' is always an object, even if dataPayload is null/undefined
+    // You can re-enable the webpush block here if needed, in this structure:
+    // webpush: {
+    //   headers: {
+    //     Urgency: 'high',
+    //   },
+    //   fcmOptions: {
+    //     link: dataPayload?.url || '/',
+    //   },
+    // },
   };
 
+  // Add a logging step to inspect the 'multicastMessage' object before sending
+  console.log('Multicast message prepared for FCM:', multicastMessage);
+
+  let successCount = 0;
+  let failureCount = 0;
+  const responses: Array<{ success: boolean; messageId?: string; error?: admin.FirebaseError }> = [];
+
   try {
-    if (Array.isArray(token)) {
-      // When sending to an array of tokens, construct a MulticastMessage directly.
-      // This type explicitly includes the 'tokens' property.
-      const message: admin.messaging.MulticastMessage = {
-        notification: notificationPayload,
-        data: data,
-        tokens: token, // 'tokens' is a valid property on MulticastMessage
-      };
-      const response = await admin.messaging().sendEachForMulticast(message);
-      console.log('Successfully sent message to multiple devices:', response.successCount, 'successful,', response.failureCount, 'failed.');
-      return response;
-    } else {
-      // When sending to a single token, construct a TokenMessage directly.
-      // This type explicitly includes the 'token' property.
-      const message: admin.messaging.TokenMessage = {
-        notification: notificationPayload,
-        data: data,
-        token: token, // 'token' is a valid property on TokenMessage
-      };
-      const messageId = await admin.messaging().send(message);
-      console.log('Successfully sent message to single device:', messageId);
-      return {
-        successCount: 1,
-        failureCount: 0,
-        results: [{ messageId: messageId }]
-      };
-    }
-  } catch (error: any) {
-    console.error('Error sending message:', error);
-    const formattedError: FirebaseErrorLike = {
-      code: error.code || 'unknown',
-      message: error.message || 'An unknown error occurred.',
-      ...(error.stack && { stack: error.stack }),
-      ...error
-    };
-    return {
-      successCount: 0,
-      failureCount: 1,
-      results: [{ error: formattedError }]
-    };
+    // CORRECTED: Pass the single multicastMessage object
+    const response = await messagingAdmin.sendEachForMulticast(multicastMessage);
+    successCount = response.successCount;
+    failureCount = response.failureCount;
+    responses.push(...response.responses);
+
+    console.log(`FCM Batch Send Results: ${successCount} successful, ${failureCount} failed.`);
+
+    response.responses.forEach(
+      (
+        resp: { success: boolean; messageId?: string; error?: admin.FirebaseError },
+        idx: number
+      ) => {
+        if (!resp.success) {
+          // fcmTokens[idx] is still the correct token from the original list
+          console.warn(`Failed to send message to token ${fcmTokens[idx]}:`, resp.error);
+        }
+      }
+    );
+
+  } catch (error) {
+    console.error('Error sending FCM multicast message (outer catch):', error);
+    failureCount = fcmTokens.length; // If a general error occurs, assume all failed
+    responses.push({ success: false, error: error as admin.FirebaseError });
+    throw error;
   }
+
+  return { successCount, failureCount, responses };
 }

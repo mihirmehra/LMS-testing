@@ -11,8 +11,18 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
-import { PushNotificationService } from '@/lib/client/pushNotifications';
-import { DeviceRegistration } from '@/types/device';
+// Import individual functions directly from pushNotifications utility.
+// Removed 'getToken' and 'messaging' imports as they are not exported.
+import {
+  isSupported,
+  subscribeToPush,
+  unsubscribeFromPush,
+  hasActiveSubscription,
+  getDeviceType, // This might not be strictly needed in UI, but keep if used elsewhere
+  getUserDevices,
+  testPushNotification,
+} from '@/lib/client/pushNotifications';
+import { DeviceRegistration } from '@/types/device'; // Assuming updated DeviceRegistration here
 import {
   Smartphone,
   Monitor,
@@ -39,9 +49,6 @@ export function PushNotificationSettings() {
   const [pushEnabledForCurrentBrowser, setPushEnabledForCurrentBrowser] = useState(false);
   const [loadingBrowserPushStatus, setLoadingBrowserPushStatus] = useState(true);
 
-  // Get the singleton instance of PushNotificationService
-  const pushService = PushNotificationService.getInstance();
-
   // Load devices from backend
   const loadDevices = useCallback(async () => {
     if (!user?.id) {
@@ -53,7 +60,7 @@ export function PushNotificationSettings() {
     try {
       setLoadingDevices(true);
       setMessage(null); // Clear previous messages
-      const userDevices = await pushService.getUserDevices(user.id);
+      const userDevices = await getUserDevices(user.id);
       setDevices(userDevices);
     } catch (error) {
       console.error('Error loading devices:', error);
@@ -65,12 +72,12 @@ export function PushNotificationSettings() {
     } finally {
       setLoadingDevices(false);
     }
-  }, [user, pushService]);
+  }, [user]);
 
   // Check current browser's push subscription status
   const checkCurrentBrowserPushStatus = useCallback(async () => {
     setLoadingBrowserPushStatus(true);
-    if (!pushService.isSupported()) {
+    if (!isSupported()) {
       setPushEnabledForCurrentBrowser(false);
       setMessage({
         type: 'error',
@@ -81,7 +88,7 @@ export function PushNotificationSettings() {
     }
 
     try {
-      const hasSubscription = await pushService.hasActiveSubscription();
+      const hasSubscription = await hasActiveSubscription();
       setPushEnabledForCurrentBrowser(hasSubscription);
     } catch (error) {
       console.error('Error checking browser push status:', error);
@@ -90,12 +97,10 @@ export function PushNotificationSettings() {
     } finally {
       setLoadingBrowserPushStatus(false);
     }
-  }, [pushService]);
+  }, []);
 
   useEffect(() => {
-    // Load all registered devices for the user
     loadDevices();
-    // Check if the current browser has an active push subscription
     checkCurrentBrowserPushStatus();
   }, [user, loadDevices, checkCurrentBrowserPushStatus]);
 
@@ -109,7 +114,7 @@ export function PushNotificationSettings() {
       setMessage({ type: 'error', text: 'Device name is required.' });
       return;
     }
-    if (!pushService.isSupported()) {
+    if (!isSupported()) {
       setMessage({ type: 'error', text: 'Push notifications are not supported by your browser.' });
       return;
     }
@@ -118,20 +123,16 @@ export function PushNotificationSettings() {
       setIsRegistering(true);
       setMessage(null);
 
-      const device = await pushService.subscribeToPush(user.id, deviceName.trim());
+      await subscribeToPush(user.id);
 
-      if (device) {
-        setMessage({
-          type: 'success',
-          text: 'Device registered successfully! You will now receive push notifications.',
-        });
-        await loadDevices(); // Reload devices to reflect new or updated registration
-        await checkCurrentBrowserPushStatus(); // Update browser push status
-        setIsAddDeviceModalOpen(false);
-        setDeviceName('');
-      } else {
-        setMessage({ type: 'error', text: 'Failed to subscribe to push notifications. No device object returned.' });
-      }
+      setMessage({
+        type: 'success',
+        text: 'Device registered successfully! You will now receive push notifications.',
+      });
+      await loadDevices(); // Reload devices to reflect new or updated registration
+      await checkCurrentBrowserPushStatus(); // Update browser push status
+      setIsAddDeviceModalOpen(false);
+      setDeviceName('');
     } catch (error: any) {
       console.error('Error registering device:', error);
       setMessage({
@@ -146,7 +147,7 @@ export function PushNotificationSettings() {
   const handleUnregisterDevice = async (deviceId: string) => {
     try {
       setMessage(null);
-      await pushService.unsubscribeFromPush(deviceId);
+      await unsubscribeFromPush(deviceId);
 
       setMessage({
         type: 'success',
@@ -168,7 +169,7 @@ export function PushNotificationSettings() {
       setMessage({ type: 'error', text: 'You must be logged in to manage push notifications.' });
       return;
     }
-    if (!pushService.isSupported()) {
+    if (!isSupported()) {
       setMessage({ type: 'error', text: 'Push notifications are not supported in this browser.' });
       return;
     }
@@ -179,31 +180,24 @@ export function PushNotificationSettings() {
     try {
       if (checked) {
         // When enabling, we attempt to subscribe (which is idempotent)
-        const currentDeviceName = `${pushService.getDeviceType()} - ${new Date().toLocaleString()}`;
-        const registeredDevice = await pushService.subscribeToPush(user.id, currentDeviceName);
-        if (registeredDevice) {
-          setMessage({ type: 'success', text: 'Push notifications enabled for this device.' });
-        } else {
-          setMessage({ type: 'error', text: 'Failed to enable push notifications for this device.' });
-          setPushEnabledForCurrentBrowser(false); // Revert UI
-        }
+        await subscribeToPush(user.id);
+        setMessage({ type: 'success', text: 'Push notifications enabled for this device.' });
       } else {
-        // When disabling, find the current browser's subscription and unregister its device
+        // When disabling, we must first get the current browser's subscription
         const registration = await navigator.serviceWorker.ready;
         const currentSubscription = await registration.pushManager.getSubscription();
 
         if (currentSubscription) {
-          // Find the device ID associated with this subscription endpoint
-          const deviceToUnsubscribe = devices.find(d => d.subscription.endpoint === currentSubscription.endpoint);
+          // Since getToken is not exported from pushNotifications, we cannot directly get
+          // the FCM token here to match with devices.find(d => d.fcmToken === currentToken).
+          // Therefore, we perform client-side unsubscribe directly and inform the user
+          // about potential need for manual backend removal.
+          await currentSubscription.unsubscribe(); // This will remove the browser's push subscription
 
-          if (deviceToUnsubscribe?.id) {
-            await pushService.unsubscribeFromPush(deviceToUnsubscribe.id);
-            setMessage({ type: 'success', text: 'Push notifications disabled for this device.' });
-          } else {
-            // If no matching device found on backend, just unsubscribe browser-side
-            await currentSubscription.unsubscribe();
-            setMessage({ type: 'success', text: 'Browser subscription removed. You may need to manually remove the device from the list if it persists.' });
-          }
+          setMessage({
+            type: 'success',
+            text: 'Push notifications disabled for this browser. If this device still appears in your registered devices list, please remove it manually.',
+          });
         } else {
           setMessage({ type: 'success', text: 'No active browser subscription found to disable.' });
         }
@@ -235,7 +229,7 @@ export function PushNotificationSettings() {
     try {
       setIsTesting(true);
       setMessage(null);
-      await pushService.testPushNotification(user.id);
+      await testPushNotification(user.id, "Test Notification", "This is a test push notification from Country Roof CRM!");
       setMessage({
         type: 'success',
         text: 'Test notification sent! Check your device.',
@@ -320,7 +314,7 @@ export function PushNotificationSettings() {
             <Switch
               checked={pushEnabledForCurrentBrowser}
               onCheckedChange={handleTogglePushNotifications}
-              disabled={loadingBrowserPushStatus || !pushService.isSupported()}
+              disabled={loadingBrowserPushStatus || !isSupported()}
             />
           </div>
 
@@ -331,7 +325,7 @@ export function PushNotificationSettings() {
               <Button
                 onClick={() => setIsAddDeviceModalOpen(true)}
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={!pushService.isSupported() || !user?.id}
+                disabled={!isSupported() || !user?.id}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Register New Device
@@ -442,7 +436,7 @@ export function PushNotificationSettings() {
           </div>
 
           {/* Browser Support Information */}
-          {!pushService.isSupported() && (
+          {!isSupported() && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>

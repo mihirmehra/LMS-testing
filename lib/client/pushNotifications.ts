@@ -1,225 +1,321 @@
 // lib/client/pushNotifications.ts
-import { DeviceRegistration, PushSubscription } from '@/types/device';
 
-// Helper function to convert Uint8Array to base64 string for VAPID key
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getMessaging, getToken, onMessage, MessagePayload, deleteToken } from 'firebase/messaging';
+import { DeviceRegistration } from '@/types/device'; // Your existing DeviceRegistration type
+import { toast } from '@/hooks/use-toast'; // Import your toast component
 
-// Define the expected structure of the payload sent from the Service Worker to the client
-// This should directly mirror what your /api/notifications/push endpoint sends to web-push,
-// which then gets forwarded by the service worker if the app is in the foreground.
+// Define the expected structure of the payload for foreground messages
+// This is what FCM sends when the app is in the foreground.
+// The 'notification' field is standard FCM, 'data' is custom data.
 export interface ForegroundMessagePayload {
-  type: 'PUSH_NOTIFICATION'; // Custom type to identify the message source/kind
   notification?: {
     title?: string;
     body?: string;
     icon?: string;
-    tag?: string;
-    // Add other standard notification properties if used (e.g., actions)
+    // Add other standard notification properties if used (e.g., image, click_action)
   };
   data?: {
-    url?: string; // e.g., URL to navigate to on click
-    [key: string]: any; // Allow other custom data, can be more specific if desired
+    actionUrl?: string; // e.g., URL to navigate to on click (from your backend)
+    notificationId?: string; // if your backend sends this
+    userId?: string; // if your backend sends this
+    type?: string; // e.g., 'alert', 'info', 'success'
+    priority?: string; // e.g., 'high', 'normal'
+    [key: string]: any; // Allow other custom data
   };
 }
 
-export class PushNotificationService {
-  private static instance: PushNotificationService;
-  private VAPID_PUBLIC_KEY: string | undefined;
-  // Store the bound message handler for proper cleanup
-  private boundMessageHandler: ((event: MessageEvent) => void) | null = null;
+// Firebase configuration using environment variables
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  // measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // If you use Google Analytics
+};
 
-  private constructor() {
-    // Ensure NEXT_PUBLIC_VAPID_PUBLIC_KEY is correctly set in your .env.local
-    this.VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!this.VAPID_PUBLIC_KEY) {
-      console.warn("NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set. Push notifications may not function correctly on the client-side.");
-    }
+// Initialize Firebase App (client-side)
+let firebaseApp;
+if (typeof window !== 'undefined' && !getApps().length) { // Ensure runs only in browser and only once
+  firebaseApp = initializeApp(firebaseConfig);
+} else if (typeof window !== 'undefined' && getApps().length) {
+  firebaseApp = getApp();
+}
+
+const messaging = typeof window !== 'undefined' ? getMessaging(firebaseApp) : null;
+
+/**
+ * Checks if the current browser environment supports push notifications.
+ * This includes checking for Notification API, Service Workers, and Firebase Messaging initialization.
+ * @returns boolean - true if supported, false otherwise.
+ */
+export function isSupported(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    'Notification' in window &&
+    'serviceWorker' in navigator &&
+    !!messaging
+  );
+}
+
+/**
+ * Global function to set up Firebase Cloud Messaging on the client side.
+ * This includes requesting permission, getting the FCM token, and sending it to the backend.
+ * Renamed from setupPushNotificationsClient to subscribeToPush for clarity and consistency.
+ * @param userId The ID of the current user.
+ * @returns Promise that resolves with the FCM token string or null if not available/permission denied.
+ */
+export async function subscribeToPush(userId: string): Promise<string | null> {
+  if (!isSupported()) {
+    console.warn("Push notifications are not fully supported or initialized in this environment.");
+    return null; // --- FIX: Return null when not supported
+  }
+  // Changed NEXT_PUBLIC_FIREBASE_VAPID_KEY to NEXT_PUBLIC_VAPID_PUBLIC_KEY for consistency,
+  // but if your env is explicitly NEXT_PUBLIC_FIREBASE_VAPID_KEY, keep it that way.
+  // For this update, I'll stick to your provided variable name.
+  if (!process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
+    console.error("NEXT_PUBLIC_FIREBASE_VAPID_KEY is not set. FCM will not work.");
+    return null; // --- FIX: Return null when VAPID key is missing
   }
 
-  // Implements the Singleton pattern to ensure only one instance
-  public static getInstance(): PushNotificationService {
-    if (!PushNotificationService.instance) {
-      PushNotificationService.instance = new PushNotificationService();
-    }
-    return PushNotificationService.instance;
-  }
-
-  // Checks if push notifications are supported by the current browser
-  public isSupported(): boolean {
-    return 'serviceWorker' in navigator && 'PushManager' in window;
-  }
-
-  /**
-   * Registers a service worker, requests notification permission,
-   * subscribes to push notifications, and registers/updates the device with your backend.
-   * This method ensures idempotency by relying on the backend's `addOrUpdateDeviceRegistration`.
-   * @param userId The ID of the user.
-   * @param deviceName A friendly name for the device.
-   * @returns The registered DeviceRegistration object from the server.
-   * @throws Error if prerequisites are not met or backend registration fails.
-   */
-  public async subscribeToPush(userId: string, deviceName: string): Promise<DeviceRegistration | null> {
-    if (!this.isSupported()) {
-      console.warn('Push notifications are not supported in this browser.');
-      return null;
-    }
-    if (!this.VAPID_PUBLIC_KEY) {
-      throw new Error('VAPID Public Key is not configured in client environment variables.');
-    }
-
-    // 1. Request notification permission from the user
+  try {
+    // Request notification permission
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      throw new Error('Notification permission denied by the user.');
+      console.warn('Notification permission denied by the user.');
+      return null; // --- FIX: Return null when permission is denied
     }
 
-    // 2. Register the service worker
-    // Ensures service worker is registered and active before proceeding
-    const registration = await navigator.serviceWorker.register('/service-worker.js');
-    await navigator.serviceWorker.ready; // Wait for the service worker to be active
+    // Register the Firebase service worker (even though it's served from /public)
+    // The path here MUST match the path to your firebase-messaging-sw.js file.
+    // This registration can also happen once in app/layout.tsx
+    const serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    console.log('Firebase Messaging Service Worker registered:', serviceWorkerRegistration);
 
-    console.log('Service Worker registered and ready:', registration);
+    // Get FCM registration token
+    const currentToken = await getToken(messaging!, { // Use non-null assertion as messaging is checked by isSupported
+      vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY, // This is your VAPID key from Firebase Console
+      serviceWorkerRegistration: serviceWorkerRegistration,
+    });
 
-    // 3. Get or create the push subscription
-    let pushSubscription = await registration.pushManager.getSubscription();
-
-    // If no existing subscription, create a new one
-    if (!pushSubscription) {
-      const subscribeOptions = {
-        userVisibleOnly: true, // Required by web-push, ensures visible notification is shown
-        applicationServerKey: urlBase64ToUint8Array(this.VAPID_PUBLIC_KEY), // Your VAPID public key
-      };
-      pushSubscription = await registration.pushManager.subscribe(subscribeOptions);
-      console.log('New push subscription created:', pushSubscription);
+    if (currentToken) {
+      console.log("FCM Registration Token:", currentToken);
+      // Send this token to your backend to associate with the userId
+      await sendFcmTokenToBackend(userId, currentToken); // Removed swRegistration as it's not needed for backend storage
+      return currentToken; // --- FIX: Return the token on success
     } else {
-      console.log('Existing push subscription found:', pushSubscription);
+      console.log('No FCM registration token available. Request permission to generate one.');
+      return null; // --- FIX: Return null if no token is available
+    }
+  } catch (error) {
+    console.error('Error setting up Firebase push notifications:', error);
+    return null; // --- FIX: Return null on any error during setup
+  }
+}
+
+/**
+ * Checks if there is an active FCM subscription for the current device.
+ * This does not guarantee the subscription is valid on the backend, only that a token exists client-side.
+ * @returns Promise<boolean> - true if an FCM token is found, false otherwise.
+ */
+export async function hasActiveSubscription(): Promise<boolean> {
+  if (!messaging) {
+    return false;
+  }
+  try {
+    const currentToken = await getToken(messaging);
+    return !!currentToken;
+  } catch (error) {
+    console.error('Error checking active subscription:', error);
+    return false;
+  }
+}
+
+
+/**
+ * Sends the FCM token and device info to your backend for registration.
+ * This function is internal to this file, called by subscribeToPush.
+ */
+async function sendFcmTokenToBackend(
+  userId: string,
+  fcmToken: string
+): Promise<DeviceRegistration | null> {
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in.');
     }
 
-    if (!pushSubscription) {
-      throw new Error('Failed to obtain a push subscription from the browser.');
-    }
+    const deviceName = getDeviceType(); // Reusing your helper from the old service
+    const deviceType = getDeviceType();
 
-    // Convert PushSubscription to a plain JSON object which is suitable for sending to backend.
-    // .toJSON() is the standard method for this.
-    const subscriptionData: PushSubscription = pushSubscription.toJSON() as PushSubscription;
-
-    // 4. Send the subscription details to your backend API for registration or update
-    // The backend's /api/notifications/devices POST endpoint now handles the upsert logic.
     const response = await fetch('/api/notifications/devices', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`, // Assuming auth token is stored in localStorage
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
         userId,
-        deviceName,
-        deviceType: this.getDeviceType(), // Determine device type (desktop, mobile, tablet)
-        subscription: subscriptionData, // The actual push subscription object
+        fcmToken, // Now sending the FCM token string
+        deviceName: `Browser (${deviceName})`,
+        deviceType: deviceType,
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to register/update device with the server.');
+      throw new Error(errorData.message || 'Failed to register FCM token with the server.');
     }
 
     const device: DeviceRegistration = await response.json();
-    console.log('Device registered/updated successfully with backend:', device);
-    return device; // Return the DeviceRegistration object received from the backend
+    console.log('FCM Token registered/updated successfully with backend:', device);
+    return device;
+  } catch (err) {
+    console.error('Error sending FCM token to backend:', err);
+    return null;
+  }
+}
+
+/**
+ * Retrieves a list of push device registrations for the given user from the backend.
+ * This function makes an API call to your backend.
+ * @param userId The ID of the user whose devices to retrieve.
+ * @returns Promise<DeviceRegistration[]> - An array of registered devices.
+ */
+export async function getUserDevices(userId: string): Promise<DeviceRegistration[]> {
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in.');
+    }
+
+    const response = await fetch(`/api/notifications/devices?userId=${userId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to fetch user devices from the server.');
+    }
+
+    const devices: DeviceRegistration[] = await response.json();
+    console.log('User devices fetched successfully:', devices);
+    return devices;
+  } catch (error) {
+    console.error('Error fetching user devices:', error);
+    return []; // Return an empty array on error
+  }
+}
+
+/**
+ * Sets up a listener for messages coming from FCM when the app is in the foreground.
+ * This function now also handles displaying the system notification and in-app toast.
+ * @param callback Optional: A function to call with the parsed payload after displaying notifications.
+ * @returns A cleanup function to unsubscribe the listener.
+ */
+export function onPushMessageReceived(callback?: (payload: ForegroundMessagePayload) => void): () => void {
+  if (!messaging) {
+    console.warn("Firebase Messaging not initialized. Cannot listen for foreground messages.");
+    return () => {}; // Return a no-op cleanup
   }
 
-  /**
-   * Checks if there's an active push subscription in the browser.
-   * This is a client-side check, not a check against the backend.
-   * @returns True if an active subscription exists in the browser, false otherwise.
-   */
-  public async hasActiveSubscription(): Promise<boolean> {
-    if (!this.isSupported()) {
-      return false;
-    }
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      return !!subscription;
-    } catch (error) {
-      console.error('Error checking for active subscription:', error);
-      return false;
-    }
-  }
+  const unsubscribe = onMessage(messaging, (payload: MessagePayload) => {
+    console.log('Foreground FCM message received:', payload);
 
-  /**
-   * Sets up a listener for messages coming from the service worker.
-   * These messages are typically sent when a push notification is received
-   * while the application is in the foreground.
-   * @param callback A function to call when a foreground message is received, receiving the parsed payload.
-   * @returns A cleanup function to unsubscribe the listener.
-   */
-  public onForegroundMessage(callback: (payload: ForegroundMessagePayload) => void): () => void {
-    // Define the message handler, binding 'this' to the class instance
-    this.boundMessageHandler = (event: MessageEvent) => {
-      // Ensure the message has the expected structure from our service worker
-      // which should mirror the payload sent from the backend.
-      if (event.data && typeof event.data === 'object' && event.data.type === 'PUSH_NOTIFICATION') {
-        // Cast the event.data directly to ForegroundMessagePayload
-        // because the 'notification' and 'data' are top-level properties.
-        callback(event.data as ForegroundMessagePayload);
-      }
+    // Transform FCM MessagePayload to your internal ForegroundMessagePayload structure
+    const transformedPayload: ForegroundMessagePayload = {
+      notification: payload.notification,
+      data: payload.data, // Custom data sent from Firebase Admin SDK
     };
 
-    // Add the listener to the service worker container
-    navigator.serviceWorker.addEventListener('message', this.boundMessageHandler);
+    // --- NEW: Display the browser notification ---
+    if (transformedPayload.notification && Notification.permission === 'granted') {
+      const { title, body, icon } = transformedPayload.notification;
+      const { actionUrl, ...customData } = transformedPayload.data || {};
 
-    // Return a cleanup function to be called when the component unmounts
-    return () => {
-      if (this.boundMessageHandler) {
-        navigator.serviceWorker.removeEventListener('message', this.boundMessageHandler);
-        this.boundMessageHandler = null; // Clear the reference
-      }
-    };
-  }
+      const notificationOptions: NotificationOptions = {
+        body: body,
+        icon: icon || '/favicon.png', // Use provided icon or default favicon
+        data: customData, // Attach custom data to the notification object
+        // Add a tag to group notifications, e.g., 'new-message'
+        tag: 'foreground-fcm-notification',
+      };
 
-  /**
-   * Unsubscribes from push notifications at the browser level and deregisters the device from the backend.
-   * @param deviceId The ID of the device registration to delete from the backend.
-   * @returns True if successfully unregistered from backend, false otherwise.
-   * @throws Error if the backend deregistration fails.
-   */
-  public async unsubscribeFromPush(deviceId: string): Promise<boolean> {
-    // Attempt browser-side unsubscribe first
-    try {
-      if (this.isSupported()) {
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
+      try {
+        const notification = new Notification(title || 'New Notification', notificationOptions);
 
-        if (subscription) {
-          const success = await subscription.unsubscribe(); // Unsubscribe from the browser's push service
-          if (success) {
-            console.log('Browser-side push subscription unsubscribed successfully.');
-          } else {
-            console.warn('Browser-side unsubscribe returned false. Subscription might already be inactive or failed silently.');
-          }
-        } else {
-          console.log('No active browser-side subscription found to unsubscribe.');
+        // Optional: Add click handler to the notification
+        if (actionUrl) {
+          notification.onclick = (event) => {
+            event.preventDefault();
+            window.open(actionUrl, '_blank'); // Open the URL in a new tab
+            notification.close();
+          };
         }
-      } else {
-        console.warn('Push notifications not supported in this browser, skipping browser-side unsubscribe.');
+        console.log('Foreground system notification displayed successfully.');
+      } catch (error) {
+        console.error('Error displaying foreground system notification:', error);
       }
-    } catch (browserError) {
-      console.error('Error during browser-side unsubscribe, proceeding with server-side deletion:', browserError);
-      // Continue to server-side deletion even if browser-side fails, to ensure DB consistency
+    } else if (transformedPayload.notification) {
+      console.warn('Notification permission not granted, skipping system notification display.');
     }
 
-    // Delete the device registration from your backend API
+    // --- NEW: Show an in-app toast notification ---
+    if (transformedPayload.notification) {
+      const { title, body } = transformedPayload.notification;
+      const { actionUrl } = transformedPayload.data || {};
+      toast({
+        title: title || "New Notification",
+        description: body,
+        action: actionUrl ? {
+          label: "View",
+          onClick: () => window.open(actionUrl, '_blank'),
+        } : undefined,
+      });
+    }
+
+    // Call the provided callback (if any) after handling display
+    if (callback) {
+      callback(transformedPayload);
+    }
+  });
+  return unsubscribe;
+}
+
+/**
+ * Unsubscribes from FCM push notifications and optionally deregisters from the backend.
+ * NOTE: FCM doesn't have a direct 'unsubscribe' like Web Push. Deleting the token
+ * is the closest equivalent. If you want to stop receiving notifications, you
+ * should delete the token from the client and from your backend.
+ * @param deviceId The ID of the device registration to delete from the backend.
+ * @returns True if successfully unregistered from backend, false otherwise.
+ */
+export async function unsubscribeFromPush(deviceId: string): Promise<boolean> {
+  try {
+    // Delete the FCM token from the client (this might prevent future messages)
+    if (messaging) {
+      // getToken() returns the current token, if it exists, without generating a new one.
+      // We then delete that token.
+      await getToken(messaging)
+        .then(async (currentToken) => {
+          if (currentToken) {
+            await deleteToken(messaging);
+            console.log('FCM token deleted from client.');
+          }
+        })
+        .catch((error) => {
+          // Handle cases where getToken fails (e.g., no active subscription)
+          console.warn('Could not get FCM token to delete (may not exist or permission denied):', error);
+        });
+    }
+
+    // Also delete the device registration from your backend API
     const response = await fetch(`/api/notifications/devices/${deviceId}`, {
       method: 'DELETE',
       headers: {
@@ -233,77 +329,63 @@ export class PushNotificationService {
     }
 
     console.log('Device unregistered successfully from backend.');
-    return true; // Successfully unregistered from backend
+    return true;
+  } catch (err: any) {
+    console.error('Error unsubscribing from push notifications:', err);
+    return false;
   }
+}
 
-  /**
-   * Fetches all registered devices for a specific user from the backend.
-   * @param userId The ID of the user whose devices to fetch.
-   * @returns An array of DeviceRegistration objects.
-   * @throws Error if fetching devices from backend fails.
-   */
-  public async getUserDevices(userId: string): Promise<DeviceRegistration[]> {
-    const response = await fetch(`/api/notifications/devices?userId=${userId}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-      },
-    });
+/**
+ * Sends a test push notification to the user's registered devices via the backend API.
+ * This is still triggered from the frontend, but the actual sending happens on the backend
+ * using Firebase Admin SDK.
+ * @param userId The ID of the user to send the test notification to.
+ * @param title Title of the test notification.
+ * @param message Body of the test notification.
+ * @param actionUrl Optional URL for notification click action.
+ * @throws Error if sending the test notification fails.
+ */
+export async function testPushNotification(userId: string, title: string, message: string, actionUrl?: string): Promise<void> {
+  const response = await fetch('/api/notifications/push', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+    },
+    body: JSON.stringify({
+      userId,
+      title,
+      message,
+      actionUrl, // Pass actionUrl to the backend to include in FCM data
+      icon: '/favicon.png', // Or a default icon
+      tag: 'test-notification', // For grouping notifications
+      data: { // Additional custom data that will be in payload.data
+        source: 'frontend_test',
+        timestamp: Date.now(),
+      }
+    }),
+  });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to fetch user devices.');
-    }
-
-    const devices: DeviceRegistration[] = await response.json();
-    console.log('Fetched user devices:', devices);
-    return devices;
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || 'Failed to send test notification.');
   }
+  console.log('Test push notification request sent successfully to backend for FCM.');
+}
 
-  /**
-   * Sends a test push notification to the user's registered devices via the backend API.
-   * @param userId The ID of the user to send the test notification to.
-   * @throws Error if sending the test notification fails.
-   */
-  public async testPushNotification(userId: string): Promise<void> {
-    const response = await fetch('/api/notifications/push', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-      },
-      body: JSON.stringify({
-        userId,
-        title: 'Test Notification from Frontend',
-        message: 'This is a test push notification initiated from your app!',
-        url: window.location.origin, // Optional: URL to open when notification is clicked
-        icon: '/icons/icon-192x192.png', // Optional: Icon for the notification
-        tag: 'test-notification', // Optional: Tag to group notifications
-        data: {
-          source: 'frontend_test',
-          timestamp: Date.now(),
-        }
-      }),
-    });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to send test notification.');
-    }
-    console.log('Test push notification request sent successfully.');
+/**
+ * Helper to determine the device type based on user agent string.
+ * @returns The determined device type ('desktop', 'mobile', or 'tablet').
+ */
+export function getDeviceType(): DeviceRegistration['deviceType'] {
+  const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  if (/Mobi|Android|iPhone|iPod/i.test(userAgent)) {
+    return 'mobile';
   }
-
-  /**
-   * Helper to determine the device type based on user agent string.
-   * @returns The determined device type ('desktop', 'mobile', or 'tablet').
-   */
-  public getDeviceType(): DeviceRegistration['deviceType'] {
-    const userAgent = navigator.userAgent;
-    if (/Mobi|Android|iPhone|iPod/i.test(userAgent)) { // More comprehensive mobile check
-      return 'mobile';
-    }
-    if (/Tablet|iPad/i.test(userAgent) && !/Mobi/i.test(userAgent)) { // Check for tablet, exclude phones
-      return 'tablet';
-    }
-    return 'desktop';
+  if (/Tablet|iPad/i.test(userAgent) && !/Mobi/i.test(userAgent)) {
+    return 'tablet';
   }
+  return 'desktop';
 }

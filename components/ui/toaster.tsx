@@ -1,3 +1,4 @@
+// components/ui/toaster.tsx
 'use client';
 
 import { useToast } from '@/hooks/use-toast';
@@ -8,27 +9,32 @@ import {
   ToastProvider,
   ToastTitle,
   ToastViewport,
-} from '@/components/ui/toast';
+  // NO ToastAction import here, as the 'action' prop is already the element
+} from '@/components/ui/toast'; // Ensure this path is correct
 
 export function Toaster() {
-  const { toasts } = useToast();
+  // dismiss is destructured but not used in this specific render logic
+  const { toasts, dismiss } = useToast(); 
 
   return (
     <ToastProvider>
-      {toasts.map(function ({ id, title, description, action, ...props }) {
-        return (
-          <Toast key={id} {...props}>
-            <div className="grid gap-1">
-              {title && <ToastTitle>{title}</ToastTitle>}
-              {description && (
-                <ToastDescription>{description}</ToastDescription>
-              )}
-            </div>
-            {action}
-            <ToastClose />
-          </Toast>
-        );
-      })}
+      {toasts.map(({ id, title, description, action, variant, open, onOpenChange, ...props }) => (
+        <Toast
+          key={id}
+          variant={variant}
+          open={open}
+          onOpenChange={onOpenChange}
+          {...props}
+        >
+          <div className="grid gap-1">
+            {title && <ToastTitle>{title}</ToastTitle>}
+            {description && <ToastDescription>{description}</ToastDescription>}
+          </div>
+          {/* CRITICAL FIX: Render 'action' directly. It's already the JSX element. */}
+          {action}
+          <ToastClose />
+        </Toast>
+      ))}
       <ToastViewport />
     </ToastProvider>
   );

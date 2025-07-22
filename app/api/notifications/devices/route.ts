@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth } from '@/lib/auth/server-utils';
 import {
   getDeviceRegistrationsByUserId,
-  addOrUpdateDeviceRegistration, // Still using this one
+  addOrUpdateDeviceRegistration,
 } from '@/lib/dev-db/push-devices';
 import { DeviceRegistration } from '@/types/device'; // Import for typing
 
@@ -61,10 +61,11 @@ export async function GET(request: NextRequest) {
 
 /**
  * Handles POST requests to register (add or update) a device for push notifications.
- * It expects device information including the push subscription and user ID.
+ * It expects device information including the FCM token and user ID.
  */
 export async function POST(request: NextRequest) {
-  let deviceData: Omit<DeviceRegistration, 'id' | 'mongoId' | '_id' | 'createdAt' | 'updatedAt'>;
+  // Changed deviceData type to expect fcmToken
+  let deviceData: Omit<DeviceRegistration, 'id' | 'mongoId' | '_id' | 'createdAt' | 'updatedAt' | 'subscription'>; 
   try {
     const decoded = verifyAuth(request);
     if (!decoded || !decoded.userId) {
@@ -81,9 +82,10 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    if (!deviceData.userId || !deviceData.subscription || !deviceData.subscription.endpoint) {
+    // Validate for fcmToken instead of subscription
+    if (!deviceData.userId || !deviceData.fcmToken) { 
         return NextResponse.json(
-            { message: 'Missing required device registration information: userId, subscription, or subscription.endpoint.' },
+            { message: 'Missing required device registration information: userId or fcmToken.' },
             { status: 400 }
         );
     }
@@ -97,12 +99,12 @@ export async function POST(request: NextRequest) {
 
     // --- Utilize the unified addOrUpdateDeviceRegistration function ---
     // This function now returns whether a new device was created or an existing one was updated.
-    const { device: registeredDevice, created: wasNewDeviceCreated } = await addOrUpdateDeviceRegistration(deviceData); // <--- MODIFIED
+    const { device: registeredDevice, created: wasNewDeviceCreated } = await addOrUpdateDeviceRegistration(deviceData);
 
     // Return different status codes based on whether a new device was created or an existing one updated
     const status = wasNewDeviceCreated ? 201 : 200; // 201 Created for new, 200 OK for update
 
-    return NextResponse.json(registeredDevice, { status: status }); // <--- MODIFIED
+    return NextResponse.json(registeredDevice, { status: status });
   } catch (error) {
     console.error('API POST /notifications/devices error:', error);
     if (error instanceof Error) {
@@ -112,7 +114,8 @@ export async function POST(request: NextRequest) {
       if (error.message.includes('Unauthorized: User ID mismatch')) {
         return NextResponse.json({ message: error.message }, { status: 403 });
       }
-      if (error.message.includes('subscription endpoint is required')) {
+      // Changed error message check for FCM token
+      if (error.message.includes('FCM token is required')) { 
         return NextResponse.json({ message: error.message }, { status: 400 });
       }
     }
