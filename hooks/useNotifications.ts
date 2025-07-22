@@ -77,7 +77,7 @@ export function useNotifications() {
   useEffect(() => {
     if (currentUserId && !authLoading) {
       // 1. Setup Firebase messaging, request permission, get token, and send to backend
-      subscribeToPush(currentUserId);
+      // subscribeToPush(currentUserId);
 
       // 2. Subscribe to foreground messages and update in-app notifications
       const unsubscribe = onPushMessageReceived((payload) => {

@@ -12,8 +12,9 @@ import { Toaster } from '@/components/ui/toaster';
 import { Loader2 } from 'lucide-react';
 // Updated imports: import functions directly instead of a PushNotificationService class
 import {
-  subscribeToPush,
   onPushMessageReceived,
+  hasActiveSubscription, // <--- NEW: Import hasActiveSubscription
+  // getDeviceType is not directly used in the auto-subscription logic here, but can be kept if needed elsewhere
 } from '@/lib/client/pushNotifications';
 import { ToastAction } from '@/components/ui/toast'; // IMPORTANT: Import ToastAction component
 import { ForegroundMessagePayload } from '@/lib/client/pushNotifications'; // Import the payload type
@@ -32,99 +33,72 @@ export function ClientLayout({ children }: ClientLayoutProps) {
   const { notifications, fetchNotifications, markAsRead } = useNotifications();
 
   // Ref to keep track of notification IDs that have already been shown as a toast
-  const toastedNotificationIds = useRef<Set<string>>(new Set());
+  const toastedNotificationIds = useRef(new Set<string>());
 
-  // Define public routes
+  // NEW: Ref to track if we've already attempted push notification subscription
+  // This prevents redundant checks/calls on every re-render.
+  const isPushSubscriptionAttempted = useRef(false);
+
+  // Public routes that don't require authentication
   const publicRoutes = ['/login', '/register', '/forgot-password', '/reset-password'];
   const isPublicRoute = publicRoutes.includes(pathname);
 
-  // Redirect unauthenticated users from private routes
+  // Effect for authentication redirection
   useEffect(() => {
     if (!isLoading && !isAuthenticated && !isPublicRoute) {
       router.push('/login');
     }
   }, [isAuthenticated, isLoading, isPublicRoute, router]);
 
-  // Handle foreground push messages
+  // Effect for handling foreground push messages
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
-      // Ensure the client-side push notification library is initialized and listening
-      onPushMessageReceived((payload: ForegroundMessagePayload) => {
-        console.log('Foreground message received:', payload);
+    // Only set up message listener if authenticated
+    if (isAuthenticated) {
+      const unsubscribe = onPushMessageReceived((payload: ForegroundMessagePayload) => {
+        console.log('Foreground push message received:', payload);
+        const notificationData = payload.notification;
+        const customData = payload.data;
 
-        // Extract necessary data from payload
-        const notificationTitle = payload.notification?.title || 'New Notification';
-        const notificationBody = payload.notification?.body || 'You have a new message.';
-        const notificationId = payload.data?.notificationId; // Assuming you send notificationId in data payload
-        const actionUrl = payload.data?.actionUrl; // Optional action URL from data
-
-        showToast({
-          title: notificationTitle,
-          description: notificationBody,
-          variant: 'default', // You might want to derive this from payload.data or payload.notification type
-          duration: 9000, // Toast will auto-dismiss after 9 seconds
-          // Conditionally add an action button if actionUrl is present
-          action: actionUrl ? (
-            <ToastAction
-              altText="View"
-              onClick={() => {
-                if (actionUrl) router.push(actionUrl);
-              }}
-            >
-              View
-            </ToastAction>
-          ) : undefined,
-        });
-
-        // Optionally, fetch latest notifications after receiving a push message
-        if (user?.id) {
-          fetchNotifications(user.id);
+        if (notificationData) {
+          showToast({
+            title: notificationData.title || 'New Notification',
+            description: notificationData.body || 'You have a new message.',
+            variant: customData?.priority === 'high' ? 'destructive' : 'default', // Example: use 'destructive' for high priority
+            action: customData?.actionUrl ? (
+              <ToastAction
+                altText={customData.actionLabel || 'View'}
+                onClick={() => {
+                  if (customData.actionUrl) {
+                    router.push(customData.actionUrl);
+                  }
+                }}
+              >
+                {customData.actionLabel || 'View'}
+              </ToastAction>
+            ) : undefined,
+          });
+          // After showing toast, consider fetching latest notifications
+          fetchNotifications(); // Refresh notifications in NotificationCenter
         }
       });
+
+      return () => {
+        unsubscribe(); // Clean up the listener on unmount or re-run
+      };
     }
-  }, [isAuthenticated, user?.id, fetchNotifications, router]);
+  }, [isAuthenticated, fetchNotifications, showToast, router]);
 
-
-  // Effect for fetching notifications and showing toasts for new ones
+  // Effect for displaying in-app toasts for new notifications
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
-      fetchNotifications(user.id); // Fetch all notifications on load/auth status change
-
-      // Subscribe to push notifications for the user
-      subscribeToPush(user.id)
-        .then(token => {
-          // --- FIX: 'token' is now correctly typed as 'string | null' from subscribeToPush ---
-          if (token) { // This truthiness check is now valid
-            console.log("FCM Token (ClientLayout):", token);
-            // You might want to send this token to your backend if you haven't already in subscribeToPush
-          } else {
-            console.warn("Failed to get FCM token or permission not granted.");
-          }
-        })
-        .catch(error => {
-          console.error("Failed to subscribe to push notifications (ClientLayout):", error);
-          showToast({
-            title: "Push Notification Error",
-            description: "Could not subscribe to real-time notifications.",
-            variant: "destructive",
-          });
-        });
-    }
-  }, [isAuthenticated, user?.id, fetchNotifications]);
-
-
-  // Effect to show toasts for new, unread notifications fetched from API
-  useEffect(() => {
-    if (isAuthenticated && notifications.length > 0 && user?.id) {
-      notifications.forEach((n: AppNotificationType) => { // --- FIX: Explicitly type n as AppNotificationType ---
-        // Only show toast for unread notifications that haven't been toasted before
+    if (isAuthenticated && notifications.length > 0) {
+      notifications.forEach((n) => {
+        // Only show toast for unread notifications and if not already toasted in this session
         if (!n.read && !toastedNotificationIds.current.has(n.id)) {
+          console.log('Showing toast for notification:', n.id);
           showToast({
             title: n.title,
             description: n.message,
-            // --- FIX: 'n.type' now includes 'error' from types/notification.ts ---
-            variant: n.type === 'error' ? 'destructive' : 'default',
-            duration: 9000, // Toasts auto-dismiss after 9 seconds
+            variant: n.priority === 'high' ? 'destructive' : 'default', // Example conditional variant
             action: n.actionUrl ? (
               <ToastAction
                 altText={n.actionLabel || 'View'}
@@ -178,10 +152,8 @@ export function ClientLayout({ children }: ClientLayoutProps) {
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto"> 
-        <div className="p-6">
-          {children}
-        </div>
+      <main className="flex-1 overflow-y-auto">
+        {children}
       </main>
       <Toaster />
     </div>
