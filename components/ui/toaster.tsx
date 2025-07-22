@@ -1,4 +1,3 @@
-// components/ui/toaster.tsx
 'use client';
 
 import { useToast } from '@/hooks/use-toast';
@@ -9,32 +8,37 @@ import {
   ToastProvider,
   ToastTitle,
   ToastViewport,
-  // NO ToastAction import here, as the 'action' prop is already the element
-} from '@/components/ui/toast'; // Ensure this path is correct
+  ToastAction,
+} from '@/components/ui/toast';
 
 export function Toaster() {
-  // dismiss is destructured but not used in this specific render logic
-  const { toasts, dismiss } = useToast(); 
+  const { toasts } = useToast();
 
   return (
     <ToastProvider>
-      {toasts.map(({ id, title, description, action, variant, open, onOpenChange, ...props }) => (
-        <Toast
-          key={id}
-          variant={variant}
-          open={open}
-          onOpenChange={onOpenChange}
-          {...props}
-        >
-          <div className="grid gap-1">
-            {title && <ToastTitle>{title}</ToastTitle>}
-            {description && <ToastDescription>{description}</ToastDescription>}
-          </div>
-          {/* CRITICAL FIX: Render 'action' directly. It's already the JSX element. */}
-          {action}
-          <ToastClose />
-        </Toast>
-      ))}
+      {toasts.map(({ id, title, description, action, ...props }) => {
+        // If action is an object with label and onClick, render ToastAction
+        const renderAction =
+          action && typeof action === 'object' && 'label' in action && 'onClick' in action ? (
+            <ToastAction altText={action.label} onClick={action.onClick}>
+              {action.label}
+            </ToastAction>
+          ) : (
+            // Otherwise, assume action is already a React node or undefined
+            action
+          );
+
+        return (
+          <Toast key={id} {...props}>
+            <div className="grid gap-1">
+              {title && <ToastTitle>{title}</ToastTitle>}
+              {description && <ToastDescription>{description}</ToastDescription>}
+            </div>
+            {renderAction}
+            <ToastClose />
+          </Toast>
+        );
+      })}
       <ToastViewport />
     </ToastProvider>
   );
