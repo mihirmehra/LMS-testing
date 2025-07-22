@@ -1,8 +1,14 @@
-// lib/notification.ts
+// lib/api/notifications.ts
 
 import { getDatabase } from '@/lib/mongodb';
-import { Notification } from '@/types/notification';
+import { Notification } from '@/types/notification'; // Assuming Notification.scheduledFor is string | undefined
 import { ObjectId } from 'mongodb';
+
+// Define an input type for createNotification that explicitly expects Date objects for date fields
+// This aligns with how the 'scheduledFor' is passed from the API route (as a Date object).
+type CreateNotificationInput = Omit<Notification, 'id' | 'createdAt' | 'read' | 'scheduledFor'> & {
+  scheduledFor?: Date; // Explicitly expect Date for scheduledFor when creating
+};
 
 export class NotificationsAPI {
   private static async getCollection() {
@@ -10,20 +16,35 @@ export class NotificationsAPI {
     return db.collection('notifications');
   }
 
-  static async getUserNotifications(userId: string): Promise<Notification[]> {
+  /**
+   * Fetches notifications for a given user, filtered by their role.
+   * Agents only receive notifications addressed to them (by userId).
+   * Admins receive all notifications.
+   * @param userId The ID of the authenticated user.
+   * @param userRole The role of the authenticated user ('admin' or 'agent').
+   * @returns A promise that resolves to an array of Notification objects.
+   */
+  static async getUserNotifications(userId: string, userRole: 'admin' | 'agent'): Promise<Notification[]> {
     try {
       const collection = await this.getCollection();
-      // Fetch documents from MongoDB. They will contain _id (ObjectId) and date fields as Date objects.
+      
+      let query: { userId?: string } = {};
+
+      // If the user is an 'agent', they should only see notifications explicitly for their userId.
+      // If the user is an 'admin', the query remains empty, fetching all notifications.
+      if (userRole === 'agent') {
+        query.userId = userId;
+      } 
+      // For 'admin' role, 'query' remains an empty object, effectively fetching all.
+
       const notificationsFromDb = await collection
-        .find({ userId })
+        .find(query) // Use the constructed query based on user role
         .sort({ createdAt: -1 })
-        .limit(50)
+        .limit(50) // Limit the number of notifications returned
         .toArray();
       
-      // Explicitly map each document to the Notification interface, handling type conversions.
       return notificationsFromDb.map(doc => {
-        // Ensure all required properties are present and correctly typed.
-        // Convert Date objects from DB to ISO strings to match Notification type (string).
+        // Map MongoDB document to the Notification interface, ensuring correct types
         const notification: Notification = {
           id: doc._id.toString(), // Convert ObjectId to string for 'id'
           userId: doc.userId,
@@ -33,61 +54,73 @@ export class NotificationsAPI {
           priority: doc.priority,
           read: doc.read,
           createdAt: new Date(doc.createdAt).toISOString(), // Convert Date to ISO string
-          scheduledFor: doc.scheduledFor ? new Date(doc.scheduledFor).toISOString() : undefined, // Convert Date to ISO string or undefined
-          // Include optional properties if they exist, otherwise undefined
-          data: doc.data || undefined,
-          actionUrl: doc.actionUrl || undefined,
-          actionLabel: doc.actionLabel || undefined,
+          scheduledFor: doc.scheduledFor ? new Date(doc.scheduledFor).toISOString() : undefined,
+          actionUrl: doc.actionUrl,
+          actionLabel: doc.actionLabel,
+          data: doc.data,
         };
         return notification;
-      }); // No need for 'as Notification[]' cast if each object is correctly built
+      }) as Notification[];
     } catch (error) {
       console.error('Error fetching notifications:', error);
       return [];
     }
   }
 
-  static async createNotification(notificationData: Omit<Notification, 'id' | 'createdAt' | 'read'>): Promise<Notification> {
+  /**
+   * Creates a new notification in the database.
+   * @param notificationData The data for the new notification, with 'scheduledFor' as a Date object.
+   * @returns A promise that resolves to the created Notification object (with 'scheduledFor' as ISO string).
+   */
+  static async createNotification(notificationData: CreateNotificationInput): Promise<Notification> {
     try {
       const collection = await this.getCollection();
       const now = new Date();
       
-      const newNotification = {
-        ...notificationData,
-        read: false,
-        // Ensure createdAt is an ISO string for insertion to match Notification type
-        createdAt: now.toISOString(),
+      // Prepare the object for MongoDB insertion. MongoDB can handle Date objects.
+      const newNotificationForDb = {
+        ...notificationData, // This includes 'scheduledFor' as a Date object from CreateNotificationInput
+        read: false, // Notifications are unread by default when created
+        createdAt: now,
       };
 
-      const result = await collection.insertOne(newNotification);
+      const result = await collection.insertOne(newNotificationForDb);
       
+      // Return the created notification, ensuring 'scheduledFor' is an ISO string
       return {
-        ...newNotification,
         id: result.insertedId.toString(),
-      } as Notification;
+        userId: newNotificationForDb.userId,
+        type: newNotificationForDb.type,
+        title: newNotificationForDb.title,
+        message: newNotificationForDb.message,
+        priority: newNotificationForDb.priority,
+        read: newNotificationForDb.read,
+        createdAt: newNotificationForDb.createdAt.toISOString(), // Convert Date to ISO string
+        scheduledFor: newNotificationForDb.scheduledFor ? newNotificationForDb.scheduledFor.toISOString() : undefined, // Convert Date to ISO string
+        actionUrl: newNotificationForDb.actionUrl,
+        actionLabel: newNotificationForDb.actionLabel,
+        data: newNotificationForDb.data,
+      } as Notification; // Explicitly cast to Notification to match return type
     } catch (error) {
       console.error('Error creating notification:', error);
-      throw new Error('Failed to create notification');
+      throw error; // Re-throw to allow error handling upstream
     }
   }
 
-  static async markAsRead(notificationId: string, userId: string): Promise<boolean> {
+  /**
+   * Marks a specific notification as read for a given user.
+   * Ensures a user can only mark their own notifications as read.
+   * @param notificationId The ID of the notification to mark as read.
+   * @param userId The ID of the user attempting to mark the notification.
+   * @returns A promise that resolves to true if the notification was marked, false otherwise.
+   */
+  static async markNotificationAsRead(notificationId: string, userId: string): Promise<boolean> {
     try {
-      if (!ObjectId.isValid(notificationId)) {
-        return false;
-      }
-      
       const collection = await this.getCollection();
       const result = await collection.updateOne(
-        { 
-          _id: new ObjectId(notificationId),
-          userId: userId 
-        },
-        { 
-          $set: { read: true } 
-        }
+        { _id: new ObjectId(notificationId), userId: userId }, // Ensure user ownership
+        { $set: { read: true } }
       );
-      
       return result.modifiedCount === 1;
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -95,38 +128,36 @@ export class NotificationsAPI {
     }
   }
 
-  static async markAllAsRead(userId: string): Promise<number> {
+  /**
+   * Marks all unread notifications for a specific user as read.
+   * @param userId The ID of the user whose notifications should be marked as read.
+   * @returns A promise that resolves to true if any notifications were marked, false otherwise.
+   */
+  static async markAllNotificationsAsRead(userId: string): Promise<boolean> {
     try {
       const collection = await this.getCollection();
       const result = await collection.updateMany(
-        { 
-          userId: userId,
-          read: false 
-        },
-        { 
-          $set: { read: true } 
-        }
+        { userId: userId, read: false }, // Only mark unread notifications
+        { $set: { read: true } }
       );
-      
-      return result.modifiedCount;
+      return result.modifiedCount > 0;
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
-      return 0;
+      return false;
     }
   }
 
+  /**
+   * Deletes a specific notification for a given user.
+   * Ensures a user can only delete their own notifications.
+   * @param notificationId The ID of the notification to delete.
+   * @param userId The ID of the user attempting to delete the notification.
+   * @returns A promise that resolves to true if the notification was deleted, false otherwise.
+   */
   static async deleteNotification(notificationId: string, userId: string): Promise<boolean> {
     try {
-      if (!ObjectId.isValid(notificationId)) {
-        return false;
-      }
-      
       const collection = await this.getCollection();
-      const result = await collection.deleteOne({
-        _id: new ObjectId(notificationId),
-        userId: userId
-      });
-      
+      const result = await collection.deleteOne({ _id: new ObjectId(notificationId), userId: userId }); // Ensure user ownership
       return result.deletedCount === 1;
     } catch (error) {
       console.error('Error deleting notification:', error);
@@ -134,56 +165,46 @@ export class NotificationsAPI {
     }
   }
 
-  static async createMeetingReminder(
-    userId: string, 
-    eventId: string, 
-    eventTitle: string, 
-    startTime: Date, 
-    reminderMinutes: number = 30
-  ): Promise<Notification | null> {
+  /**
+   * Deletes multiple notifications for a given user.
+   * Ensures a user can only delete their own notifications.
+   * @param notificationIds An array of notification IDs to delete.
+   * @param userId The ID of the user attempting to delete the notifications.
+   * @returns A promise that resolves to the number of deleted notifications.
+   */
+  static async deleteBulkNotifications(notificationIds: string[], userId: string): Promise<number> {
     try {
-      const reminderTime = new Date(startTime.getTime() - reminderMinutes * 60 * 1000);
-      
-      // Don't create reminder if it's in the past
-      if (reminderTime <= new Date()) {
-        return null;
-      }
-
-      return await this.createNotification({
-        userId,
-        type: 'task_reminder', 
-        title: 'Upcoming Meeting',
-        message: `Meeting "${eventTitle}" starts in ${reminderMinutes} minutes`,
-        priority: 'high',
-        data: {
-          eventId,
-          eventTitle,
-          startTime: startTime.toISOString(), 
-          reminderMinutes,
-        },
-        scheduledFor: reminderTime.toISOString(), // Convert Date to ISO string
-        actionUrl: '/calendar',
-        actionLabel: 'View Calendar',
-      });
+      const collection = await this.getCollection();
+      const objectIds = notificationIds.map(id => new ObjectId(id));
+      const result = await collection.deleteMany({ _id: { $in: objectIds }, userId: userId }); // Ensure user ownership for all
+      return result.deletedCount;
     } catch (error) {
-      console.error('Error creating meeting reminder:', error);
-      return null;
+      console.error('Error deleting bulk notifications:', error);
+      return 0;
     }
   }
 
+  /**
+   * Creates a specific type of notification for lead updates.
+   * @param userId The ID of the user to notify.
+   * @param leadId The ID of the lead involved.
+   * @param leadName The name of the lead.
+   * @param updateType The type of update (e.g., "created", "updated").
+   * @returns A promise that resolves to the created Notification or null if an error occurred.
+   */
   static async createLeadUpdateNotification(
     userId: string,
     leadId: string,
     leadName: string,
-    updateType: string,
-    message: string
+    updateType: string
   ): Promise<Notification | null> {
     try {
+      // For createNotification, 'scheduledFor' is optional and not relevant for this type of notification
       return await this.createNotification({
         userId,
         type: 'lead_update',
         title: 'Lead Update',
-        message: `${leadName}: ${message}`,
+        message: `Lead "${leadName}" has been ${updateType}.`,
         priority: 'medium',
         data: {
           leadId,
@@ -199,6 +220,14 @@ export class NotificationsAPI {
     }
   }
 
+  /**
+   * Creates a task reminder notification.
+   * @param userId The ID of the user to notify.
+   * @param taskId The ID of the task.
+   * @param taskTitle The title of the task.
+   * @param dueDate The due date of the task.
+   * @returns A promise that resolves to the created Notification or null if an error occurred.
+   */
   static async createTaskReminder(
     userId: string,
     taskId: string,
@@ -211,14 +240,14 @@ export class NotificationsAPI {
       const hoursUntilDue = Math.floor(timeDiff / (1000 * 60 * 60));
 
       let priority: Notification['priority'] = 'low';
-      let message = `Task "${taskTitle}" is due`;
+      let message = `Task \"${taskTitle}\" is due`;
 
       if (hoursUntilDue <= 1) {
         priority = 'high';
-        message = `Task "${taskTitle}" is due in ${Math.max(0, hoursUntilDue)} hour(s)`;
+        message = `Task \"${taskTitle}\" is due in ${Math.max(0, hoursUntilDue)} hour(s)`;
       } else if (hoursUntilDue <= 24) {
         priority = 'medium';
-        message = `Task "${taskTitle}" is due in ${hoursUntilDue} hours`;
+        message = `Task \"${taskTitle}\" is due in ${hoursUntilDue} hours`;
       }
 
       return await this.createNotification({
@@ -234,6 +263,7 @@ export class NotificationsAPI {
         },
         actionUrl: '/tasks',
         actionLabel: 'View Tasks',
+        scheduledFor: dueDate, // Pass dueDate as a Date object
       });
     } catch (error) {
       console.error('Error creating task reminder:', error);
