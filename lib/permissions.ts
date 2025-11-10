@@ -15,9 +15,9 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { resource: 'communications', actions: ['create', 'read', 'update', 'delete'] },
   ],
   agent: [
-    { resource: 'leads', actions: ['create', 'read', 'update'] }, // No assign permission
-    { resource: 'analytics', actions: ['read'] }, // Only own data
-    { resource: 'reports', actions: ['read'] }, // Only own data
+    { resource: 'leads', actions: ['create', 'read', 'update', 'export'] }, // No assign permission
+    { resource: 'analytics', actions: ['read', 'export'] }, // Only own data
+    { resource: 'reports', actions: ['read', 'export'] }, // Only own data
     { resource: 'calendar', actions: ['create', 'read', 'update', 'delete'] },
     { resource: 'communications', actions: ['create', 'read', 'update'] },
   ],

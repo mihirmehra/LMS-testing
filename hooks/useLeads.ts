@@ -11,6 +11,23 @@ const parseLeadDates = (lead: any): Lead => {
     createdAt: new Date(lead.createdAt),
     updatedAt: new Date(lead.updatedAt),
     lastContacted: lead.lastContacted ? new Date(lead.lastContacted) : undefined,
+    dateAssignedToSales: lead.dateAssignedToSales ? new Date(lead.dateAssignedToSales) : undefined,
+    activities: lead.activities.map((activity: any) => ({
+      ...activity,
+      date: new Date(activity.date), // Convert activity date
+    })),
+  };
+};
+
+// Update parseAllLeads to handle missing budget values
+const parseAllLeads = (lead: any): Lead => {
+  return {
+    ...lead,
+    budget: lead.budget !== undefined && lead.budget !== null ? lead.budget : 'Not Specified', // Default to 'Not Specified' only if budget is null or undefined
+    createdAt: new Date(lead.createdAt),
+    updatedAt: new Date(lead.updatedAt),
+    lastContacted: lead.lastContacted ? new Date(lead.lastContacted) : undefined,
+    dateAssignedToSales: lead.dateAssignedToSales ? new Date(lead.dateAssignedToSales) : undefined,
     activities: lead.activities.map((activity: any) => ({
       ...activity,
       date: new Date(activity.date), // Convert activity date
@@ -63,6 +80,7 @@ export function useLeads(): UseLeadsReturn {
     };
   }, []);
 
+  // Debugging: Log raw and parsed data to verify budget field
   const fetchLeads = useCallback(async (leadType?: 'Lead' | 'Cold-Lead') => {
     try {
       setLoading(true);
@@ -80,9 +98,9 @@ export function useLeads(): UseLeadsReturn {
       if (response.ok) {
         const data = await response.json();
         console.log('Fetched leads data (raw):', data);
-        const parsedLeads = Array.isArray(data) ? data.map(parseLeadDates) : [];
+        const parsedLeads = Array.isArray(data) ? data.map(leadType === 'Lead' ? parseAllLeads : parseLeadDates) : [];
+        console.log('Parsed leads data:', parsedLeads);
         setLeads(parsedLeads);
-        console.log('Fetched leads data (parsed):', parsedLeads);
       } else {
         const errorData = await response.json().catch(() => ({ message: 'Failed to fetch leads' }));
         console.error('Fetch error:', errorData);

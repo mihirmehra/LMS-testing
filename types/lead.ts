@@ -7,6 +7,7 @@ export interface Lead {
   secondaryEmail?: string;
   propertyType: 'Residential' | 'Commercial' | 'Land';
   budgetRange: string;
+  budget?: number;
   preferredLocations: string[];
   source: 'Website' | 'Referral' | 'Social Media' | 'Walk-in' | 'Advertisement' | 'Other';
   status: 'New' 
@@ -32,6 +33,8 @@ export interface Lead {
         | 'Forward call'
         | 'Out Of Network';
   assignedAgent?: string;
+  /** When the lead was assigned to a salesperson (filled automatically when assigned) */
+  dateAssignedToSales?: Date;
   notes: string;
   createdAt: Date;
   updatedAt: Date;

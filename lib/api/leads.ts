@@ -9,6 +9,9 @@ interface CsvLeadData {
   name: string;
   email: string;
   phone: string;
+  // Optional field names that may contain the original received date in different spreadsheets
+  'date received'?: string;
+  createdat?: string;
   'property type'?: string;
   'budget range'?: string;
   'preferred locations'?: string;
@@ -65,6 +68,7 @@ export class LeadsAPI {
           createdAt: new Date(createdAt),
           updatedAt: new Date(updatedAt),
           lastContacted: lastContacted ? new Date(lastContacted) : undefined, // Ensure consistent Date or undefined
+          dateAssignedToSales: (lead.dateAssignedToSales ? new Date(lead.dateAssignedToSales) : undefined),
           activities: activities?.map((activity: any) => ({ // Cast from `any` to `Activity` for safety
             ...activity,
             date: new Date(activity.date)
@@ -96,6 +100,7 @@ export class LeadsAPI {
         createdAt: new Date(lead.createdAt),
         updatedAt: new Date(lead.updatedAt),
         lastContacted: lead.lastContacted ? new Date(lead.lastContacted) : undefined,
+        dateAssignedToSales: lead.dateAssignedToSales ? new Date(lead.dateAssignedToSales) : undefined,
         activities: lead.activities?.map((activity: any) => ({ // Cast from `any` to `Activity`
           ...activity,
           date: new Date(activity.date)
@@ -149,6 +154,9 @@ export class LeadsAPI {
       if (createdLead.lastContacted) {
         createdLead.lastContacted = new Date(createdLead.lastContacted);
       }
+      if ((createdLead as any).dateAssignedToSales) {
+        (createdLead as any).dateAssignedToSales = new Date((createdLead as any).dateAssignedToSales);
+      }
       createdLead.activities = createdLead.activities?.map((activity: any) => ({
         ...activity,
         date: new Date(activity.date)
@@ -189,6 +197,9 @@ export class LeadsAPI {
       // If lastContacted is provided in updateData, ensure it's a Date object
       if (updateData.lastContacted !== undefined) {
         finalUpdatePayload.lastContacted = updateData.lastContacted ? new Date(updateData.lastContacted) : undefined;
+      }
+      if (updateData.dateAssignedToSales !== undefined) {
+        finalUpdatePayload.dateAssignedToSales = updateData.dateAssignedToSales ? new Date(updateData.dateAssignedToSales) : undefined;
       }
       // Handle array updates if they are part of the `dataToUpdate`
       if (updateData.preferredLocations !== undefined) {
@@ -316,6 +327,7 @@ export class LeadsAPI {
     let failed = 0;
     const errors: string[] = [];
     const collection = await this.getCollection();
+    // We'll use a per-lead createdAt to preserve original "Date Received" if provided by the CSV/XLSX file
     const now = new Date();
 
     for (let i = 0; i < leadsData.length; i++) {
@@ -370,12 +382,22 @@ export class LeadsAPI {
         };
         console.log(`[LeadsAPI] Row ${rowNumber}: Preparing to insert lead:`, newLead.name);
 
+        // Determine createdAt for this row. The import route lowercases keys like 'date received'.
+  let createdAtForRow: Date = now;
+  const possibleDateStr = (leadData['date received'] as any) || (leadData['createdat'] as any);
+        if (possibleDateStr) {
+          const parsed = new Date(possibleDateStr);
+          if (!isNaN(parsed.getTime())) {
+            createdAtForRow = parsed;
+          }
+        }
+
         const result = await collection.insertOne({
           ...newLead,
           activities: [],
           attachments: [],
-          createdAt: now,
-          updatedAt: now,
+          createdAt: createdAtForRow,
+          updatedAt: createdAtForRow,
         });
 
         if (result.acknowledged) {

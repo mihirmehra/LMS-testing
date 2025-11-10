@@ -33,6 +33,10 @@ export function LeadExportModal({ open, onOpenChange, leads }: LeadExportModalPr
     notes: false,
     createdAt: true,
     lastContacted: false,
+    lastComment: false,
+    lastCommentDate: false,
+    lastCommentAuthor: false,
+    activities: false,
   });
 
   const [filters, setFilters] = useState({
@@ -60,6 +64,10 @@ export function LeadExportModal({ open, onOpenChange, leads }: LeadExportModalPr
     notes: 'Notes',
     createdAt: 'Created Date',
     lastContacted: 'Last Contacted',
+    lastComment: 'Last Comment',
+    lastCommentDate: 'Last Comment Date',
+    lastCommentAuthor: 'Last Comment Author',
+    activities: 'All Activities',
   };
 
   const handleFieldToggle = (field: string, checked: boolean) => {
@@ -180,6 +188,30 @@ export function LeadExportModal({ open, onOpenChange, leads }: LeadExportModalPr
           case 'lastContacted':
             value = lead.lastContacted ? new Date(lead.lastContacted).toLocaleDateString() : 'Never';
             break;
+          case 'lastComment': {
+            const last = lead.activities && lead.activities.length > 0 ? lead.activities[lead.activities.length - 1] : null;
+            value = last ? `${last.description}` : '';
+            break;
+          }
+          case 'lastCommentDate': {
+            const last = lead.activities && lead.activities.length > 0 ? lead.activities[lead.activities.length - 1] : null;
+            value = last ? new Date(last.date).toLocaleString() : '';
+            break;
+          }
+          case 'lastCommentAuthor': {
+            const last = lead.activities && lead.activities.length > 0 ? lead.activities[lead.activities.length - 1] : null;
+            value = last ? (last.agent || '') : '';
+            break;
+          }
+          case 'activities': {
+            // Join activities into a single string with author and date for readability
+            if (lead.activities && lead.activities.length > 0) {
+              value = lead.activities.map(act => `${act.agent || 'Unknown'} (${new Date(act.date).toLocaleString()}): ${act.description.replace(/\n/g, ' ' )}`).join(' | ');
+            } else {
+              value = '';
+            }
+            break;
+          }
         }
         
         // Escape commas and quotes for CSV

@@ -78,7 +78,21 @@ export async function PUT(
     const db = await getDatabase();
     const leadsCollection = db.collection('leads');
 
-    const { _id, ...dataToUpdate } = updateData; // Remove _id from updateData if present
+    // Remove _id from updateData if present
+    const { _id, ...dataToUpdate } = updateData;
+
+    // Fetch existing lead to detect assignment changes
+    const existingLead = await leadsCollection.findOne({ _id: new ObjectId(id) });
+    if (!existingLead) {
+      return NextResponse.json({ error: 'Lead not found for update' }, { status: 404 });
+    }
+
+    // If assignedAgent is being set now but was previously empty, set dateAssignedToSales
+    if (dataToUpdate.assignedAgent && !existingLead.assignedAgent) {
+      // If caller supplied an explicit dateAssignedToSales, respect it; otherwise set to now
+      dataToUpdate.dateAssignedToSales = dataToUpdate.dateAssignedToSales ? new Date(dataToUpdate.dateAssignedToSales) : new Date();
+    }
+
     dataToUpdate.updatedAt = new Date(); // Ensure updatedAt is set/updated
 
     const result = await leadsCollection.findOneAndUpdate(
@@ -87,20 +101,14 @@ export async function PUT(
       { returnDocument: 'after' } // Return the updated document
     );
 
-    console.log(`[API PUT] Raw result from findOneAndUpdate:`, result);
-
-    // FIX: Check if 'result' itself is null/undefined, not 'result.value'
-    if (!result) {
-      console.warn(`[API PUT] Lead not found for update, returning 404 for ID: ${id}. FindOneAndUpdate returned null/undefined.`);
-      return NextResponse.json(
-        { error: 'Lead not found for update' },
-        { status: 404 }
-      );
+    if (!result || !result.value) {
+      console.warn(`[API PUT] Lead not found for update, findOneAndUpdate returned no value for ID: ${id}.`);
+      return NextResponse.json({ error: 'Lead not found for update' }, { status: 404 });
     }
 
-    // FIX: Access the document directly from 'result'
-    const { _id: updatedDocId, ...restOfUpdatedLead } = result;
-    const updatedLead = { id: updatedDocId.toString(), ...restOfUpdatedLead };
+    const updatedDoc = result.value;
+    const { _id: updatedId, ...rest } = updatedDoc;
+    const updatedLead = { id: updatedId.toString(), ...rest };
 
     console.log(`[API PUT] Successfully updated lead ID: ${id}, returning 200.`);
     return NextResponse.json(updatedLead);

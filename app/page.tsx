@@ -40,7 +40,7 @@ export default function HomePage() {
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('created-desc');
-  const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   const permissionService = PermissionService.getInstance();
 

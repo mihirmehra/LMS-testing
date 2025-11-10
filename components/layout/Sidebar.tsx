@@ -51,6 +51,14 @@ export function Sidebar({ className }: SidebarProps) {
       visible: true,
     },
     {
+      name: 'All Leads',
+      href: '/admin/all-leads',
+      icon: Users,
+      current: pathname === '/admin/all-leads',
+      badge: null,
+      visible: permissionService.hasPermission(user, 'leads', 'read'),
+    },
+    {
       name: 'Leads',
       href: '/',
       icon: Users,

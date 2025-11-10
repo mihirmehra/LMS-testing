@@ -12,8 +12,12 @@ export async function GET(request: NextRequest) { // <-- Accept the request obje
       filterOptions.leadType = leadType;
     }
 
+    console.log('Filter options:', filterOptions); // Debugging log
+
     // Pass the filterOptions to LeadsAPI.getLeads()
     const leads = await LeadsAPI.getLeads(filterOptions);
+    console.log('Fetched leads:', leads); // Debugging log
+
     return NextResponse.json(leads);
   } catch (error) {
     console.error('API Error:', error);

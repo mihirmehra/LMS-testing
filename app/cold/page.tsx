@@ -40,7 +40,7 @@ export default function ColdLeadsPage() {
   const [selectedLeadIdForModal, setSelectedLeadIdForModal] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('created-desc');
   const [filters, setFilters] = useState<Filters>({});
-  const [viewMode, setViewMode] = useState<ViewMode>('card'); // Initialize with 'card' view
+  const [viewMode, setViewMode] = useState<ViewMode>('list'); // Initialize with 'card' view
 
   const permissionService = PermissionService.getInstance();
 
