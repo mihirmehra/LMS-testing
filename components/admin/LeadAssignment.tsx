@@ -128,8 +128,18 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
     const assignedAgentId = selectedAgent; // This is the userId of the agent to whom leads are assigned
 
     try {
-      for (const leadId of selectedLeads) {
-        await updateLead(leadId, { assignedAgent: assignedAgentId });
+      // Update all leads with the assigned agent
+      const updatePromises = selectedLeads.map(leadId => 
+        updateLead(leadId, { assignedAgent: assignedAgentId })
+      );
+      
+      const results = await Promise.allSettled(updatePromises);
+      
+      // Check if all updates were successful
+      const failedUpdates = results.filter(r => r.status === 'rejected');
+      
+      if (failedUpdates.length > 0) {
+        throw new Error(`Failed to assign ${failedUpdates.length} out of ${selectedLeads.length} lead(s)`);
       }
 
       // Display success message to the ADMIN who performed the action (in-page feedback)
@@ -139,40 +149,52 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
       });
 
       // --- CRITICAL FIX: Send notification ONLY to the ASSIGNED AGENT ---
-      await createNotification({
-        userId: assignedAgentId, // THIS IS THE KEY: Target the actual assigned agent
-        title: 'New Leads Assigned!',
-        message: `You have been assigned ${selectedLeads.length} new lead(s). Check your leads for details!`,
-        type: 'lead_assignment', // Specific type for easy identification/filtering
-        priority: 'high', // High priority for important assignments
-        actionUrl: '/leads', // Link to the agent's leads dashboard
-        actionLabel: 'View Assigned Leads',
-      });
-
-      // --- REMOVED THE SECOND createNotification CALL FOR ADMIN CONFIRMATION ---
-      // The `setMessage` above already provides sufficient in-page feedback to the admin.
-      // Eliminating this prevents any potential confusion or misdirection of notifications.
+      // Wrap in try-catch so notification failure doesn't prevent assignment completion
+      try {
+        await createNotification({
+          userId: assignedAgentId, // THIS IS THE KEY: Target the actual assigned agent
+          title: 'New Leads Assigned!',
+          message: `You have been assigned ${selectedLeads.length} new lead(s). Check your leads for details!`,
+          type: 'lead_assignment', // Specific type for easy identification/filtering
+          priority: 'high', // High priority for important assignments
+          actionUrl: '/leads', // Link to the agent's leads dashboard
+          actionLabel: 'View Assigned Leads',
+        });
+      } catch (notificationError) {
+        // Log notification error but don't fail the entire operation
+        console.warn('Notification creation failed, but leads were assigned successfully:', notificationError);
+      }
 
       // Reset selection and close modal
       setSelectedLeads([]);
       setSelectedAgent('');
       setIsAssignModalOpen(false);
+      
+      // Refresh leads to show updated assignments
+      await fetchLeads();
+      
       onAssignmentComplete?.(); // Trigger any callback after assignment
 
     } catch (error) {
       // Handle errors during assignment
-      setMessage({ type: 'error', text: 'Failed to assign leads' });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setMessage({ type: 'error', text: `Failed to assign leads: ${errorMessage}` });
       console.error('Lead assignment error:', error);
 
       // Send a notification to the CURRENT USER (ADMIN) if the assignment fails
       if (currentUserId) { // Ensure currentUserId exists before attempting to send error notification
+        try {
           await createNotification({
             userId: currentUserId, // Target the admin who faced the error
             title: 'Lead Assignment Failed',
-            message: `Failed to assign leads. Please try again. Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            message: `Failed to assign leads. Please try again. Error: ${errorMessage}`,
             type: 'system_alert', // Indicate this is a system-level alert for the admin
             priority: 'high',
           });
+        } catch (notificationError) {
+          // Log but don't throw - notification is secondary to showing the error message
+          console.warn('Failed to send error notification to admin:', notificationError);
+        }
       }
     } finally {
       setLoading(false); // Always stop loading

@@ -31,7 +31,8 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  Database
+  Database,
+  KeyRound
 } from 'lucide-react';
 
 interface UserWithStats extends User {
@@ -50,6 +51,7 @@ export default function UserManagementPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithStats | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -60,6 +62,11 @@ export default function UserManagementPage() {
     role: 'agent' as 'admin' | 'agent',
     phone: '',
     department: '',
+  });
+
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: '',
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -167,6 +174,12 @@ export default function UserManagementPage() {
     setIsEditModalOpen(true);
   };
 
+  const handleOpenPasswordModal = (user: UserWithStats) => {
+    setSelectedUser(user);
+    setPasswordData({ newPassword: '', confirmPassword: '' });
+    setIsPasswordModalOpen(true);
+  };
+
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
@@ -254,6 +267,52 @@ export default function UserManagementPage() {
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to delete user' });
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedUser) return;
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setMessage({ type: 'error', text: 'Passwords do not match' });
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      setMessage({ type: 'error', text: 'Password must be at least 6 characters long' });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(`/api/users/${selectedUser.id}/password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+        body: JSON.stringify({ newPassword: passwordData.newPassword }),
+      });
+
+      if (response.ok) {
+        setIsPasswordModalOpen(false);
+        setPasswordData({ newPassword: '', confirmPassword: '' });
+        setSelectedUser(null);
+        setMessage({ type: 'success', text: `Password changed successfully for ${selectedUser.name}!` });
+      } else {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to change password');
+      }
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'Failed to change password' 
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -452,6 +511,16 @@ export default function UserManagementPage() {
                             disabled={user.id === currentUser?.id}
                           >
                             <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenPasswordModal(user)}
+                            disabled={user.id === currentUser?.id}
+                            className="text-blue-600 hover:text-blue-700"
+                            title="Change Password"
+                          >
+                            <KeyRound className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="outline"
@@ -681,6 +750,112 @@ export default function UserManagementPage() {
                         </>
                       ) : (
                         'Update User'
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Change Password Modal */}
+          <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center space-x-2">
+                  <KeyRound className="h-5 w-5 text-blue-600" />
+                  <span>Change Password</span>
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedUser && `Set a new password for ${selectedUser.name}`}
+                </DialogDescription>
+              </DialogHeader>
+              {selectedUser && (
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <div>
+                    <Label htmlFor="newPassword">New Password *</Label>
+                    <div className="relative">
+                      <Input
+                        id="newPassword"
+                        type={showPassword ? 'text' : 'password'}
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                        required
+                        className="pr-10"
+                        placeholder="Enter at least 6 characters"
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-gray-400" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Password must be at least 6 characters long
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="confirmPassword">Confirm Password *</Label>
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        type={showPassword ? 'text' : 'password'}
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                        required
+                        className="pr-10"
+                        placeholder="Re-enter password"
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-gray-400" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <Alert className="bg-blue-50 border-blue-200">
+                    <AlertDescription className="text-sm text-blue-800">
+                      The user will need to use this new password on their next login.
+                    </AlertDescription>
+                  </Alert>
+                  <DialogFooter>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => {
+                        setIsPasswordModalOpen(false);
+                        setPasswordData({ newPassword: '', confirmPassword: '' });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      disabled={loading || !passwordData.newPassword || !passwordData.confirmPassword}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Changing...
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound className="h-4 w-4 mr-2" />
+                          Change Password
+                        </>
                       )}
                     </Button>
                   </DialogFooter>
