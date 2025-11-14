@@ -20,6 +20,16 @@ export async function POST(request: NextRequest) {
     const user = await UsersAPI.getUserByEmail(email);
     
     if (!user) {
+      console.warn(`Login attempt failed: User not found for email ${email}`);
+      return NextResponse.json(
+        { message: 'Invalid credentials' },
+        { status: 401 }
+      );
+    }
+
+    // Check if user has password field
+    if (!user.password) {
+      console.error(`Login attempt failed: User ${email} has no password hash in database`);
       return NextResponse.json(
         { message: 'Invalid credentials' },
         { status: 401 }
@@ -27,11 +37,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
+    console.log(`Attempting password verification for ${email}`);
     const isValidPassword = await bcrypt.compare(password, user.password);
     
     if (!isValidPassword) {
+      console.warn(`Login attempt failed: Invalid password for email ${email}`);
       return NextResponse.json(
         { message: 'Invalid credentials' },
+        { status: 401 }
+      );
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      console.warn(`Login attempt failed: User ${email} is not active`);
+      return NextResponse.json(
+        { message: 'Your account has been deactivated. Please contact support.' },
         { status: 401 }
       );
     }
@@ -53,6 +74,7 @@ export async function POST(request: NextRequest) {
     // Return user data (without password) and token
     const { password: _, ...userWithoutPassword } = user;
     
+    console.log(`Login successful for ${email}`);
     return NextResponse.json({
       user: {
         ...userWithoutPassword,

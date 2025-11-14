@@ -81,6 +81,22 @@ export async function PUT(
     // Remove _id from updateData if present
     const { _id, ...dataToUpdate } = updateData;
 
+    // If client provided createdAt or updatedAt as strings, convert to Date objects
+    if (dataToUpdate.createdAt) {
+      try {
+        dataToUpdate.createdAt = new Date(dataToUpdate.createdAt);
+      } catch (e) {
+        // ignore invalid format
+      }
+    }
+    if (dataToUpdate.updatedAt) {
+      try {
+        dataToUpdate.updatedAt = new Date(dataToUpdate.updatedAt);
+      } catch (e) {
+        // ignore invalid format
+      }
+    }
+
     // Fetch existing lead to detect assignment changes
     const existingLead = await leadsCollection.findOne({ _id: new ObjectId(id) });
     if (!existingLead) {

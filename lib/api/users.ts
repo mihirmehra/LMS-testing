@@ -136,8 +136,11 @@ export class UsersAPI {
 
   static async getUserByEmail(email: string): Promise<any | null> {
     try {
+      await this.seedDatabase();
+      
       const collection = await this.getCollection();
-      const user = await collection.findOne({ email: email.toLowerCase(), isActive: true });
+      // Don't filter by isActive here - let caller decide. Login needs to check isActive.
+      const user = await collection.findOne({ email: email.toLowerCase() });
       
       if (!user) return null;
       

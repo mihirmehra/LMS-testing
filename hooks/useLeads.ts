@@ -195,6 +195,12 @@ export function useLeads(): UseLeadsReturn {
     if (dataToSend.lastContacted instanceof Date) {
       dataToSend.lastContacted = dataToSend.lastContacted.toISOString();
     }
+    if (dataToSend.createdAt instanceof Date) {
+      dataToSend.createdAt = dataToSend.createdAt.toISOString();
+    }
+    if (dataToSend.updatedAt instanceof Date) {
+      dataToSend.updatedAt = dataToSend.updatedAt.toISOString();
+    }
     if (dataToSend.activities) {
         dataToSend.activities = dataToSend.activities.map((activity: { date: Date | string }) => ({
             ...activity,

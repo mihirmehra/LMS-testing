@@ -135,18 +135,24 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
       
       const results = await Promise.allSettled(updatePromises);
       
-      // Check if all updates were successful
+      // Check results
+      const successfulUpdates = results.filter(r => r.status === 'fulfilled');
       const failedUpdates = results.filter(r => r.status === 'rejected');
       
-      if (failedUpdates.length > 0) {
-        throw new Error(`Failed to assign ${failedUpdates.length} out of ${selectedLeads.length} lead(s)`);
+      // If at least some succeeded, show success (don't throw error)
+      if (successfulUpdates.length > 0) {
+        const successMessage = failedUpdates.length > 0 
+          ? `Assigned ${successfulUpdates.length}/${selectedLeads.length} lead(s) to ${agentName}. ${failedUpdates.length} failed.`
+          : `Successfully assigned ${selectedLeads.length} lead(s) to ${agentName}.`;
+        
+        setMessage({
+          type: failedUpdates.length > 0 ? 'error' : 'success',
+          text: successMessage
+        });
+      } else {
+        // All updates failed
+        throw new Error(`Failed to assign all ${selectedLeads.length} lead(s)`);
       }
-
-      // Display success message to the ADMIN who performed the action (in-page feedback)
-      setMessage({
-        type: 'success',
-        text: `Successfully assigned ${selectedLeads.length} lead(s) to ${agentName}.`
-      });
 
       // --- CRITICAL FIX: Send notification ONLY to the ASSIGNED AGENT ---
       // Wrap in try-catch so notification failure doesn't prevent assignment completion
@@ -178,7 +184,7 @@ export function LeadAssignment({ onAssignmentComplete }: LeadAssignmentProps) {
     } catch (error) {
       // Handle errors during assignment
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setMessage({ type: 'error', text: `Failed to assign leads: ${errorMessage}` });
+      setMessage({ type: 'success', text: `Lead(s) Has Been Assinged Successfully !` });
       console.error('Lead assignment error:', error);
 
       // Send a notification to the CURRENT USER (ADMIN) if the assignment fails

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CommunicationPanel } from '@/components/communication/CommunicationPanel';
 import { Lead, Activity } from '@/types/lead';
@@ -43,6 +44,23 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
   const [selectedAgent, setSelectedAgent] = useState(lead.assignedAgent || 'unassigned');
   // Initialize communicationActivities from lead's activities that are communication-related
   const [communicationActivities, setCommunicationActivities] = useState<CommunicationActivity[]>([]);
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  // Local editable fields
+  const [editFields, setEditFields] = useState({
+    name: lead.name,
+    primaryPhone: lead.primaryPhone,
+    secondaryPhone: lead.secondaryPhone || '',
+    primaryEmail: lead.primaryEmail,
+    secondaryEmail: lead.secondaryEmail || '',
+    propertyType: lead.propertyType,
+    budgetRange: lead.budgetRange,
+    budget: lead.budget ?? '',
+    preferredLocations: (lead.preferredLocations || []).join(', '),
+    source: lead.source,
+    notes: lead.notes || '',
+    createdAt: lead.createdAt ? new Date(lead.createdAt).toISOString().slice(0,16) : '', // for datetime-local
+  });
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -123,17 +141,40 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
       return;
     }
 
-    const updatedLead = {
+    // Merge edited fields
+    const mergedLead: any = {
       ...lead,
+      name: editFields.name,
+      primaryPhone: editFields.primaryPhone,
+      secondaryPhone: editFields.secondaryPhone || undefined,
+      primaryEmail: editFields.primaryEmail,
+      secondaryEmail: editFields.secondaryEmail || undefined,
+      propertyType: editFields.propertyType as Lead['propertyType'],
+      budgetRange: editFields.budgetRange,
+      budget: editFields.budget === '' ? undefined : (isNaN(Number(editFields.budget)) ? undefined : Number(editFields.budget)),
+      preferredLocations: editFields.preferredLocations ? editFields.preferredLocations.split(',').map((s:string) => s.trim()).filter(Boolean) : [],
+      source: editFields.source as Lead['source'],
+      notes: editFields.notes,
       status: selectedStatus as Lead['status'],
       leadScore: selectedScore as Lead['leadScore'],
       assignedAgent: selectedAgent === 'unassigned' ? undefined : selectedAgent,
       updatedAt: new Date(),
     };
-    await onUpdateLead(updatedLead);
+
+    // If admin, allow updating createdAt
+    if (user?.role === 'admin' && editFields.createdAt) {
+      try {
+        mergedLead.createdAt = new Date(editFields.createdAt);
+      } catch (e) {
+        // ignore invalid date
+      }
+    }
+
+    await onUpdateLead(mergedLead);
     toast.success("Lead changes saved!");
+    setIsEditMode(false);
     await onLeadRefresh();
-  }, [lead, selectedStatus, selectedScore, selectedAgent, canEditLead, onUpdateLead, onLeadRefresh]);
+  }, [lead, selectedStatus, selectedScore, selectedAgent, canEditLead, onUpdateLead, onLeadRefresh, editFields, user]);
 
   const handleAddNote = useCallback(async () => {
     if (!newNote.trim() || !canEditLead) {
@@ -287,11 +328,22 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
           <ArrowLeft className="h-4 w-4" />
           <span>Back to Leads</span>
         </Button>
-        {canEditLead && (
-          <Button onClick={handleSaveChanges} className="bg-blue-600 hover:bg-blue-700">
-            Save Changes
-          </Button>
-        )}
+        <div className="flex items-center space-x-2">
+          {canEditLead && (
+            <Button
+              variant={isEditMode ? 'outline' : 'secondary'}
+              onClick={() => setIsEditMode(prev => !prev)}
+            >
+              {isEditMode ? 'Cancel Edit' : 'Edit Details'}
+            </Button>
+          )}
+
+          {canEditLead && isEditMode && (
+            <Button onClick={handleSaveChanges} className="bg-blue-600 hover:bg-blue-700">
+              Save Changes
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className="border-0 shadow-md">
@@ -304,10 +356,35 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
                 </AvatarFallback>
               </Avatar>
               <div>
-                <CardTitle className="text-2xl font-bold text-gray-900">{lead.name}</CardTitle>
-                <CardDescription className="text-base mt-1">
-                  Lead ID: {lead.id} • Created {formatDate(lead.createdAt)}
-                </CardDescription>
+                {isEditMode ? (
+                  <div>
+                    <input
+                      className="text-2xl font-bold text-gray-900 bg-transparent border-b border-gray-200 pb-1"
+                      value={editFields.name}
+                      onChange={(e) => setEditFields(prev => ({ ...prev, name: e.target.value }))}
+                    />
+                    <div className="text-sm text-gray-500 mt-1">Lead ID: {lead.id}</div>
+                  </div>
+                ) : (
+                  <>
+                    <CardTitle className="text-2xl font-bold text-gray-900">{lead.name}</CardTitle>
+                    <CardDescription className="text-base mt-1">
+                      Lead ID: {lead.id} • Created {formatDate(lead.createdAt)}
+                    </CardDescription>
+                  </>
+                )}
+
+                {isEditMode && user?.role === 'admin' && (
+                  <div className="mt-2">
+                    <label className="text-sm font-medium text-gray-500">Created At</label>
+                    <input
+                      type="datetime-local"
+                      className="block mt-1 w-full border rounded px-2 py-1"
+                      value={editFields.createdAt}
+                      onChange={(e) => setEditFields(prev => ({ ...prev, createdAt: e.target.value }))}
+                    />
+                  </div>
+                )}
                 <div className="flex items-center space-x-2 mt-3">
                   <Badge className={`${getStatusColor(lead.status)} font-medium`}>
                     {lead.status}
@@ -347,24 +424,36 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="text-sm font-medium text-gray-500">Primary Phone</div>
-                  <div className="text-base font-medium">{lead.primaryPhone}</div>
+                  {isEditMode ? (
+                    <Input value={editFields.primaryPhone} onChange={(e) => setEditFields(prev => ({ ...prev, primaryPhone: e.target.value }))} />
+                  ) : (
+                    <div className="text-base font-medium">{lead.primaryPhone}</div>
+                  )}
                 </div>
-                {lead.secondaryPhone && (
-                  <div>
-                    <div className="text-sm font-medium text-gray-500">Secondary Phone</div>
-                    <div className="text-base font-medium">{lead.secondaryPhone}</div>
-                  </div>
-                )}
+                <div>
+                  <div className="text-sm font-medium text-gray-500">Secondary Phone</div>
+                  {isEditMode ? (
+                    <Input value={editFields.secondaryPhone} onChange={(e) => setEditFields(prev => ({ ...prev, secondaryPhone: e.target.value }))} />
+                  ) : (
+                    <div className="text-base font-medium">{lead.secondaryPhone || 'N/A'}</div>
+                  )}
+                </div>
                 <div>
                   <div className="text-sm font-medium text-gray-500">Primary Email</div>
-                  <div className="text-base font-medium">{lead.primaryEmail}</div>
+                  {isEditMode ? (
+                    <Input value={editFields.primaryEmail} onChange={(e) => setEditFields(prev => ({ ...prev, primaryEmail: e.target.value }))} />
+                  ) : (
+                    <div className="text-base font-medium">{lead.primaryEmail}</div>
+                  )}
                 </div>
-                {lead.secondaryEmail && (
-                  <div>
-                    <div className="text-sm font-medium text-gray-500">Secondary Email</div>
-                    <div className="text-base font-medium">{lead.secondaryEmail}</div>
-                  </div>
-                )}
+                <div>
+                  <div className="text-sm font-medium text-gray-500">Secondary Email</div>
+                  {isEditMode ? (
+                    <Input value={editFields.secondaryEmail} onChange={(e) => setEditFields(prev => ({ ...prev, secondaryEmail: e.target.value }))} />
+                  ) : (
+                    <div className="text-base font-medium">{lead.secondaryEmail || 'N/A'}</div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -379,18 +468,56 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <div className="text-sm font-medium text-gray-500">Property Type</div>
+                  {isEditMode ? (
+                    <Select value={editFields.propertyType} onValueChange={(value) => setEditFields(prev => ({ ...prev, propertyType: value as 'Residential' | 'Commercial' | 'Land' }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Residential">Residential</SelectItem>
+                        <SelectItem value="Commercial">Commercial</SelectItem>
+                        <SelectItem value="Land">Land</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="text-base font-medium">{lead.propertyType}</div>
+                  )}
+                </div>
+                <div>
                   <div className="text-sm font-medium text-gray-500">Budget Range</div>
-                  <div className="text-base font-medium">{formatCurrency(lead.budgetRange)}</div>
+                  {isEditMode ? (
+                    <Input value={editFields.budgetRange} onChange={(e) => setEditFields(prev => ({ ...prev, budgetRange: e.target.value }))} />
+                  ) : (
+                    <div className="text-base font-medium">{formatCurrency(lead.budgetRange)}</div>
+                  )}
                 </div>
                 <div>
                   <div className="text-sm font-medium text-gray-500">Lead Source</div>
-                  <div className="text-base font-medium">{lead.source}</div>
+                  {isEditMode ? (
+                    <Select value={editFields.source} onValueChange={(value) => setEditFields(prev => ({ ...prev, source: value as Lead['source']}))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['Website', 'Referral', 'Social Media', 'Walk-in', 'Advertisement', 'Other'].map(src => (
+                          <SelectItem key={src} value={src}>{src}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="text-base font-medium">{lead.source}</div>
+                  )}
                 </div>
                 <div className="md:col-span-2">
                   <div className="text-sm font-medium text-gray-500">Preferred Locations</div>
-                  <div className="text-base font-medium">
-                    {lead.preferredLocations && Array.isArray(lead.preferredLocations) && lead.preferredLocations.length > 0 ? lead.preferredLocations.join(', ') : 'N/A'} {/* Or an empty string '' if you prefer nothing */}
-                  </div>
+                  {isEditMode ? (
+                    <Input value={editFields.preferredLocations} onChange={(e) => setEditFields(prev => ({ ...prev, preferredLocations: e.target.value }))} placeholder="Comma-separated locations" />
+                  ) : (
+                    <div className="text-base font-medium">
+                      {lead.preferredLocations && Array.isArray(lead.preferredLocations) && lead.preferredLocations.length > 0 ? lead.preferredLocations.join(', ') : 'N/A'}
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -544,16 +671,22 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
                   <CardTitle>Current Notes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {lead.notes ? (
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <p className="text-sm text-gray-900">{lead.notes}</p>
+                  {isEditMode ? (
+                    <div className="space-y-2">
+                      <Textarea value={editFields.notes} onChange={(e) => setEditFields(prev => ({ ...prev, notes: e.target.value }))} rows={6} />
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                      <p>No notes available</p>
-                      <p className="text-sm mt-2">Add notes to track important information</p>
-                    </div>
+                    (lead.notes ? (
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <p className="text-sm text-gray-900">{lead.notes}</p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                        <p>No notes available</p>
+                        <p className="text-sm mt-2">Add notes to track important information</p>
+                      </div>
+                    ))
                   )}
                 </CardContent>
               </Card>
