@@ -1,55 +1,104 @@
-// lib/mongodb.ts
-import { MongoClient, Db } from 'mongodb';
+import { MongoClient, type Db } from "mongodb"
 
-// Check for MONGODB_URI environment variable
 if (!process.env.MONGODB_URI) {
-  throw new Error('Invalid/Missing environment variable: "MONGODB_URI"');
+  throw new Error('Invalid/Missing environment variable: "MONGODB_URI"')
 }
 
-const uri = process.env.MONGODB_URI;
+const uri = process.env.MONGODB_URI
 
-// Set connection options
 const options = {
-  // Connection Pooling Options (helps manage connections efficiently)
-  maxPoolSize: 5, 
-  minPoolSize: 1,
-  
-  // 🔑 FIX FOR SSL/TLS HANDSHAKE ERROR (tlsv1 alert internal error)
-  // This helps resolve connection issues in serverless runtimes.
-  serverSelectionTimeoutMS: 5000, // Optional: Time out after 5s if no server is found
-};
-
-// 1. Extend the global object to hold the cached connection promise.
-// This is the essential step for Next.js to ensure a singleton connection.
-let globalWithMongo = global as typeof globalThis & {
-  _mongoClientPromise?: Promise<MongoClient>;
-};
-
-let clientPromise: Promise<MongoClient>;
-
-// 2. Always create/reuse the connection promise on the global object.
-if (!globalWithMongo._mongoClientPromise) {
-  // If the connection is not cached, create a new client and connect
-  const client = new MongoClient(uri, options);
-  globalWithMongo._mongoClientPromise = client.connect();
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  connectTimeoutMS: 10000,
+  retryWrites: true,
+  retryReads: true,
 }
 
-// 3. Store the client promise (the cached one)
-clientPromise = globalWithMongo._mongoClientPromise;
+const globalWithMongo = global as typeof globalThis & {
+  _mongoClientPromise?: Promise<MongoClient>
+  _mongoClient?: MongoClient
+  _lastConnectionCheck?: number
+}
+
+let clientPromise: Promise<MongoClient>
+
+if (!globalWithMongo._mongoClientPromise) {
+  const client = new MongoClient(uri, options)
+  globalWithMongo._mongoClientPromise = client.connect()
+}
+
+clientPromise = globalWithMongo._mongoClientPromise
+
+// Cache the database connection for 5 seconds to avoid excessive pings
+const CONNECTION_CHECK_INTERVAL = 5000
+let cachedDb: Db | null = null
+let lastCheck = 0
 
 /**
  * Returns a promise that resolves to the database instance.
- * Call this function in your API routes/components to get a connected DB instance.
+ * Uses connection caching to improve performance.
  */
 export async function getDatabase(): Promise<Db> {
   try {
-    const client = await clientPromise;
-    // IMPORTANT: Replace 'realestate_crm' with your actual database name
-    return client.db('realestate_crm'); 
+    const now = Date.now()
+
+    // Return cached database if it was checked recently
+    if (cachedDb && now - lastCheck < CONNECTION_CHECK_INTERVAL) {
+      return cachedDb
+    }
+
+    const client = await clientPromise
+    const db = client.db("realestate_crm")
+
+    // Verify connection only if it hasn't been checked recently
+    if (now - lastCheck >= CONNECTION_CHECK_INTERVAL) {
+      try {
+        await db.admin().ping()
+        lastCheck = now
+        cachedDb = db
+      } catch (pingError) {
+        console.warn("[v0] MongoDB ping failed, reconnecting...")
+        // Reset and reconnect
+        globalWithMongo._mongoClientPromise = undefined
+        cachedDb = null
+        const newClient = new MongoClient(uri, options)
+        globalWithMongo._mongoClientPromise = newClient.connect()
+        const reconnectedClient = await globalWithMongo._mongoClientPromise
+        globalWithMongo._mongoClient = reconnectedClient
+        const newDb = reconnectedClient.db("realestate_crm")
+        cachedDb = newDb
+        lastCheck = now
+        return newDb
+      }
+    }
+
+    return db
   } catch (error) {
-    console.error('MongoDB connection error:', error);
-    throw error;
+    console.error("[v0] MongoDB connection error:", error)
+    cachedDb = null
+    if (error instanceof Error) {
+      if (error.message.includes("ENOTFOUND")) {
+        throw new Error("Database server not found. Please check MONGODB_URI.")
+      } else if (error.message.includes("authentication failed")) {
+        throw new Error("Database authentication failed. Please check credentials.")
+      }
+    }
+    throw new Error(`Database connection failed: ${error instanceof Error ? error.message : "Unknown error"}`)
   }
 }
 
-export default clientPromise;
+if (typeof process !== "undefined") {
+  process.on("SIGINT", async () => {
+    try {
+      if (globalWithMongo._mongoClient) {
+        await globalWithMongo._mongoClient.close()
+      }
+    } catch (error) {
+      console.error("[v0] Error closing MongoDB connection:", error)
+    }
+  })
+}
+
+export default clientPromise
