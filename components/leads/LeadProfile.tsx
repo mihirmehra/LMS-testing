@@ -301,7 +301,7 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
     [lead, onUpdateLead, onLeadRefresh],
   )
 
-  const formatDate = (date: Date | string) => {
+  const formatDate = (date: Date | string | undefined) => {
     return formatToDDMMYYYYWithTime(date)
   }
 
@@ -798,7 +798,7 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
 
         {/* Communication Panel */}
         <div className="lg:col-span-1">
-          <CommunicationPanel lead={lead} />
+          <CommunicationPanel lead={lead} onActivityLogged={handleCommunicationActivity} />
         </div>
       </div>
     </div>

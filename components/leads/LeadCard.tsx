@@ -69,8 +69,7 @@ export function LeadCard({ lead, onViewDetails, onEditLead }: LeadCardProps) {
 
   const formatDate = (date: Date | string | undefined) => {
     if (!date) return "N/A"
-    const dateObj = typeof date === "string" ? new Date(date) : date
-    return formatToDDMMYYYY(dateObj)
+    return formatToDDMMYYYY(date)
   }
 
   const assignedAgent = agents.find((agent) => agent.id === lead.assignedAgent)
