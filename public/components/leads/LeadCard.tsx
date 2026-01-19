@@ -66,14 +66,20 @@ export function LeadCard({ lead, onViewDetails, onEditLead }: LeadCardProps) {
     }
   }
 
-  const formatDate = (date: Date | undefined) => {
-    if (!date) return "N/A"
-    return new Intl.DateTimeFormat("en-IN", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(new Date(date))
-  }
+const formatDate = (date: string | Date | undefined) => {
+  if (!date) return "N/A"
+
+  const dateObj = typeof date === "string" ? new Date(date) : date
+
+  if (isNaN(dateObj.getTime())) return "Invalid Date"
+
+  return new Intl.DateTimeFormat("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(dateObj)
+}
+
 
   const assignedAgent = agents.find((agent) => agent.id === lead.assignedAgent)
   const daysSinceCreated = Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60 * 24))

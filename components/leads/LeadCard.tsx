@@ -147,12 +147,12 @@ export function LeadCard({ lead, onViewDetails, onEditLead }: LeadCardProps) {
             </div>
             <div className="flex items-center space-x-2 text-gray-600">
               <Calendar className="h-4 w-4 text-gray-400" />
-              <span>Received: {formatToDDMMYYYY(lead.receivedDate)}</span>
+              <span>Received: {formatDate(lead.receivedDate)}</span>
             </div>
             {lead.assignedDate && (
               <div className="flex items-center space-x-2 text-gray-600">
                 <CalendarCheck className="h-4 w-4 text-gray-400" />
-                <span>Assigned: {formatToDDMMYYYY(lead.assignedDate)}</span>
+                <span>Assigned: {formatDate(lead.assignedDate)}</span>
               </div>
             )}
           </div>
