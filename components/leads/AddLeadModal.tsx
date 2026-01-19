@@ -209,12 +209,10 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
         leadScore: formData.leadScore,
         leadType: formData.leadType,
         createdBy: user?.id || "system",
+        receivedDate: formData.receivedDate ? parseDDMMYYYY(formData.receivedDate) || new Date() : new Date(),
       }
 
-      const parsedDate = formData.receivedDate ? parseDDMMYYYY(formData.receivedDate) || new Date() : new Date()
-      const leadToSubmitWithDate = { ...leadToSubmit, receivedDate: parsedDate }
-
-      await onAddLead(leadToSubmitWithDate)
+      await onAddLead(leadToSubmit)
       onOpenChange(false)
     } catch (error) {
       console.error("Failed to add lead:", error)
