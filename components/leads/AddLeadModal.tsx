@@ -49,7 +49,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
   const [locationSelectOpen, setLocationSelectOpen] = React.useState(false)
   const [locationSearchValue, setLocationSearchValue] = React.useState("")
 
-  const initialFormData = {
+  const initialFormData: Omit<NewLeadData, "receivedDate"> & { receivedDate: string } = {
     name: "",
     primaryPhone: "",
     secondaryPhone: "",
@@ -63,8 +63,6 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
     assignedAgent: "",
     notes: "",
     leadScore: "Medium" as Lead["leadScore"],
-    attachments: [] as string[],
-    activities: [],
     leadType: "Lead" as Lead["leadType"],
     receivedDate: formatToDDMMYYYY(new Date()), // Default to current date in DD-MM-YYYY format
   }
