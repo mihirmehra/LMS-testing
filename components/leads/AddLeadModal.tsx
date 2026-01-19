@@ -67,18 +67,19 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
     receivedDate: formatToDDMMYYYY(new Date()), // Default to current date in DD-MM-YYYY format
   }
 
-  const [formData, setFormData] = useState<
-    Omit<NewLeadData, "receivedDate"> & { receivedDate: string }
-  >(initialFormData)
+  const [formData, setFormData] = useState<Omit<NewLeadData, "receivedDate"> & { receivedDate: string }>(
+    initialFormData
+  )
 
   useEffect(() => {
     if (open) {
       fetchAgents()
+      const canAssign = permissionService.canAssignLeads(user) // Define here
       setFormData({
         ...initialFormData,
-        receivedDate: formatToDDMMYYYY(new Date()), // Reset to current date in DD-MM-YYYY format
+        receivedDate: formatToDDMMYYYY(new Date()),
         createdBy: user?.id || "system",
-        assignedAgent: user?.role === "agent" && !permissionService.canAssignLeads(user) ? user.id : "",
+        assignedAgent: user?.role === "agent" && !canAssign ? user.id : "",
       })
       setModalError(null)
       setLocationSelectOpen(false)
