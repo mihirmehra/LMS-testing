@@ -35,7 +35,15 @@ export function parseDDMMYYYY(dateString: string): Date | null {
 export function formatToDDMMYYYY(date: Date | string | undefined): string {
   if (!date) return "";
 
-  const dateObj = typeof date === "string" ? new Date(date) : date;
+  let dateObj: Date;
+  
+  if (typeof date === "string") {
+    // First try parsing as DD-MM-YYYY format
+    const parsed = parseDDMMYYYY(date);
+    dateObj = parsed || new Date(date);
+  } else {
+    dateObj = date;
+  }
   
   if (isNaN(dateObj.getTime())) return "";
 
@@ -52,7 +60,15 @@ export function formatToDDMMYYYY(date: Date | string | undefined): string {
 export function formatToDDMMYYYYWithTime(date: Date | string | undefined): string {
   if (!date) return "";
 
-  const dateObj = typeof date === "string" ? new Date(date) : date;
+  let dateObj: Date;
+  
+  if (typeof date === "string") {
+    // First try parsing as DD-MM-YYYY format
+    const parsed = parseDDMMYYYY(date);
+    dateObj = parsed || new Date(date);
+  } else {
+    dateObj = date;
+  }
   
   if (isNaN(dateObj.getTime())) return "";
 
