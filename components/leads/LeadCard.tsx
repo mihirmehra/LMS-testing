@@ -69,10 +69,20 @@ export function LeadCard({ lead, onViewDetails, onEditLead }: LeadCardProps) {
 
   const formatDate = (date: Date | string | undefined) => {
     if (!date) return "N/A"
-    const d: Date = typeof date === "string" ? new Date(date) : date
-    if (isNaN(d.getTime())) return "Invalid Date"
+
+    let d: Date
+
+    if (typeof date === "string") {
+      d = new Date(date)
+    } else {
+      d = date
+    }
+
+    if (!d || isNaN(d.getTime())) return "Invalid Date"
+
     return formatToDDMMYYYY(d)
   }
+
 
   const assignedAgent = agents.find((agent) => agent.id === lead.assignedAgent)
   const daysSinceCreated = Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60 * 24))

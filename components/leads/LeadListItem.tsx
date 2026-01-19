@@ -109,8 +109,17 @@ export function LeadListItem({ lead, onViewDetails, onEditLead, onStatusChange }
 
   const formatDate = (date: Date | string | undefined) => {
     if (!date) return "N/A"
-    const d: Date = typeof date === "string" ? new Date(date) : date
-    if (isNaN(d.getTime())) return "Invalid Date"
+
+    let d: Date
+
+    if (typeof date === "string") {
+      d = new Date(date)
+    } else {
+      d = date
+    }
+
+    if (!d || isNaN(d.getTime())) return "Invalid Date"
+
     return formatToDDMMYYYY(d)
   }
 
