@@ -37,9 +37,9 @@ export interface Lead {
   /** When the lead was assigned to a salesperson (filled automatically when assigned) */
   dateAssignedToSales?: Date
   /** The date when the lead was received (can be set during creation or import) */
-  receivedDate?: Date
+  receivedDate?: Date | string
   /** The date when the lead was assigned to an agent (auto-set on assignment, only admin can edit) */
-  assignedDate?: Date
+  assignedDate?: Date | string
   notes: string
   createdAt: Date
   updatedAt: Date
