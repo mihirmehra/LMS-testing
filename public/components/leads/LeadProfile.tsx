@@ -803,7 +803,7 @@ export function LeadProfile({ lead, onBack, onUpdateLead, onLeadRefresh }: LeadP
 
         {/* Communication Panel */}
         <div className="lg:col-span-1">
-          <CommunicationPanel lead={lead} onActivityLogged={handleCommunicationActivity} />
+          <CommunicationPanel lead={lead} />
         </div>
       </div>
     </div>
