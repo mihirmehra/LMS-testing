@@ -69,8 +69,8 @@ export function LeadCard({ lead, onViewDetails, onEditLead }: LeadCardProps) {
 
   const formatDate = (date: Date | string | undefined) => {
     if (!date) return "N/A"
-    // If it's already a Date, use it. If it's a string, convert to Date.
-    const d = typeof date === "string" ? new Date(date) : date
+    const d: Date = typeof date === "string" ? new Date(date) : date
+    if (isNaN(d.getTime())) return "Invalid Date"
     return formatToDDMMYYYY(d)
   }
 
