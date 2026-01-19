@@ -107,10 +107,13 @@ export function LeadListItem({ lead, onViewDetails, onEditLead, onStatusChange }
     }
   }
 
-  const formatDate = (date: Date | string | undefined) => {
-    if (!date) return "N/A"
-    return formatToDDMMYYYY(date)
-  }
+const formatDate = (date: Date | string | undefined) => {
+  if (!date) return "N/A"
+  // If it's already a Date, use it. If it's a string, convert to Date.
+  const d = typeof date === "string" ? new Date(date) : date
+  return formatToDDMMYYYY(d)
+}
+
 
   const assignedAgent = agents.find((agent) => agent.id === lead.assignedAgent)
   const daysSinceCreated = Math.floor((Date.now() - lead.createdAt.getTime()) / (1000 * 60 * 60 * 24))
