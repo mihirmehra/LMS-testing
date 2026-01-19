@@ -301,7 +301,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                   id="receivedDate"
                   type="text"
                   placeholder="DD-MM-YYYY"
-                  value={formData.receivedDate}
+                  value={typeof formData.receivedDate === "string" ? formData.receivedDate : formatToDDMMYYYY(formData.receivedDate as Date)}
                   onChange={(e) => setFormData((prev) => ({ ...prev, receivedDate: e.target.value }))}
                   required
                 />
