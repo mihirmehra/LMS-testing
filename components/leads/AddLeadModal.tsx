@@ -1,237 +1,223 @@
 // components/leads/AddLeadModal.tsx
-'use client';
+"use client"
 
-import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-// import { Checkbox } from '@/components/ui/checkbox'; // Still not needed
-
-import { Lead } from '@/types/lead';
-import { useAuth } from '@/hooks/useAuth';
-import { PermissionService } from '@/lib/permissions';
-import { budgetRanges, locations } from '@/lib/mockData';
-import { NewLeadData } from '@/hooks/useLeads'; // This type needs to be updated!
-import { toast } from 'sonner';
-
-// Imports for the searchable multi-select box
-import * as React from "react";
-import { Check, ChevronsUpDown, XCircle } from "lucide-react"; // Added XCircle for remove button on tags
-import { cn } from "@/lib/utils"; // Assuming this utility is available for Tailwind class merging
+import { useState, useEffect } from "react"
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Badge } from '@/components/ui/badge'; // Assuming you have a Badge component for tags
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+import type { Lead } from "@/types/lead"
+import { useAuth } from "@/hooks/useAuth"
+import { PermissionService } from "@/lib/permissions"
+import { budgetRanges, locations } from "@/lib/mockData"
+import type { NewLeadData } from "@/hooks/useLeads"
+import { toast } from "sonner"
+import { parseDDMMYYYY, formatToDDMMYYYY } from "@/lib/dateUtils"
+
+import * as React from "react"
+import { Check, ChevronsUpDown, XCircle } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Badge } from "@/components/ui/badge"
 
 interface AddLeadModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onAddLead: (lead: NewLeadData) => Promise<Lead>;
-  existingLeads: Lead[];
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onAddLead: (lead: NewLeadData) => Promise<Lead>
+  existingLeads: Lead[]
 }
 
 export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: AddLeadModalProps) {
-  const { user } = useAuth();
-  const permissionService = PermissionService.getInstance();
-  const [agents, setAgents] = useState<any[]>([]);
-  const [loadingAgents, setLoadingAgents] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
+  const { user } = useAuth()
+  const permissionService = PermissionService.getInstance()
+  const [agents, setAgents] = useState<any[]>([])
+  const [loadingAgents, setLoadingAgents] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [modalError, setModalError] = useState<string | null>(null)
 
-  // States for the searchable multi-select box
-  const [locationSelectOpen, setLocationSelectOpen] = React.useState(false);
-  const [locationSearchValue, setLocationSearchValue] = React.useState("");
+  const [locationSelectOpen, setLocationSelectOpen] = React.useState(false)
+  const [locationSearchValue, setLocationSearchValue] = React.useState("")
 
   const initialFormData = {
-    name: '',
-    primaryPhone: '',
-    secondaryPhone: '',
-    primaryEmail: '',
-    secondaryEmail: '',
-    propertyType: 'Residential' as Lead['propertyType'],
-    budgetRange: '',
-    preferredLocations: [] as string[], // REVERTED: Back to string array for multiple selections
-    source: 'Website' as Lead['source'],
-    status: 'New' as Lead['status'],
-    assignedAgent: '',
-    notes: '',
-    leadScore: 'Medium' as Lead['leadScore'],
+    name: "",
+    primaryPhone: "",
+    secondaryPhone: "",
+    primaryEmail: "",
+    secondaryEmail: "",
+    propertyType: "Residential" as Lead["propertyType"],
+    budgetRange: "",
+    preferredLocations: [] as string[],
+    source: "Website" as Lead["source"],
+    status: "New" as Lead["status"],
+    assignedAgent: "",
+    notes: "",
+    leadScore: "Medium" as Lead["leadScore"],
     attachments: [] as string[],
     activities: [],
-    leadType: 'Lead' as Lead['leadType'],
-  };
+    leadType: "Lead" as Lead["leadType"],
+    receivedDate: formatToDDMMYYYY(new Date()), // Default to current date in DD-MM-YYYY format
+  }
 
-  const [formData, setFormData] = useState<NewLeadData>(initialFormData);
+  const [formData, setFormData] = useState<NewLeadData & { receivedDate: string }>(initialFormData)
 
   useEffect(() => {
     if (open) {
-      fetchAgents();
+      fetchAgents()
       setFormData({
         ...initialFormData,
-        createdBy: user?.id || 'system',
-        assignedAgent: (user?.role === 'agent' && !permissionService.canAssignLeads(user)) ? user.id : '',
-      });
-      setModalError(null);
-      setLocationSelectOpen(false);
-      setLocationSearchValue("");
+        receivedDate: formatToDDMMYYYY(new Date()), // Reset to current date in DD-MM-YYYY format
+        createdBy: user?.id || "system",
+        assignedAgent: user?.role === "agent" && !permissionService.canAssignLeads(user) ? user.id : "",
+      })
+      setModalError(null)
+      setLocationSelectOpen(false)
+      setLocationSearchValue("")
     }
-  }, [open, user?.id, user?.role, permissionService]);
+  }, [open, user, permissionService])
 
   const fetchAgents = async () => {
     try {
-      setLoadingAgents(true);
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-      const response = await fetch('/api/users', {
-        method: 'GET',
+      setLoadingAgents(true)
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      const response = await fetch("/api/users", {
+        method: "GET",
         headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
-      });
+      })
 
       if (response.ok) {
-        const users = await response.json();
-        const agentUsers = users.filter((u: any) => u.role === 'agent' && u.isActive);
-        setAgents(agentUsers);
+        const users = await response.json()
+        const agentUsers = users.filter((u: any) => u.role === "agent" && u.isActive)
+        setAgents(agentUsers)
       } else {
-        console.error('Failed to fetch agents:', response.status, await response.json().catch(() => ''));
-        setAgents([]);
+        console.error("Failed to fetch agents:", response.status, await response.json().catch(() => ""))
+        setAgents([])
       }
     } catch (error) {
-      console.error('Error fetching agents:', error);
-      setAgents([]);
+      console.error("Error fetching agents:", error)
+      setAgents([])
     } finally {
-      setLoadingAgents(false);
+      setLoadingAgents(false)
     }
-  };
+  }
 
-  const availableAgents = permissionService.filterAgentsForUser(agents, user);
+  const availableAgents = permissionService.filterAgentsForUser(agents, user)
 
   const formatPhoneNumber = (value: string) => {
-    const digits = value.replace(/\D/g, '');
+    const digits = value.replace(/\D/g, "")
 
-    if (digits.startsWith('91')) {
-      return `+${digits}`;
+    if (digits.startsWith("91")) {
+      return `+${digits}`
     }
     if (digits.length === 10) {
-      return `+91${digits}`;
+      return `+91${digits}`
     }
     if (digits.length > 0 && digits.length < 10) {
-      return `+91${digits}`;
+      return `+91${digits}`
     }
-    return digits.length > 0 ? `+${digits}` : '';
-  };
+    return digits.length > 0 ? `+${digits}` : ""
+  }
 
-  const handlePhoneChange = (field: 'primaryPhone' | 'secondaryPhone', value: string) => {
-    setModalError(null);
-    setFormData(prev => ({ ...prev, [field]: formatPhoneNumber(value) }));
-  };
+  const handlePhoneChange = (field: "primaryPhone" | "secondaryPhone", value: string) => {
+    setModalError(null)
+    setFormData((prev) => ({ ...prev, [field]: formatPhoneNumber(value) }))
+  }
 
-  // UPDATED: Handler for multi-select location combobox
   const handlePreferredLocationSelect = (selectedLocation: string) => {
-    setFormData(prev => {
-      const currentLocations = prev.preferredLocations || []; // Ensure it's an array
+    setFormData((prev) => {
+      const currentLocations = prev.preferredLocations || []
       if (currentLocations.includes(selectedLocation)) {
-        // If already selected, remove it
         return {
           ...prev,
-          preferredLocations: currentLocations.filter(loc => loc !== selectedLocation),
-        };
+          preferredLocations: currentLocations.filter((loc) => loc !== selectedLocation),
+        }
       } else {
-        // If not selected, add it
         return {
           ...prev,
           preferredLocations: [...currentLocations, selectedLocation],
-        };
+        }
       }
-    });
-    // Keep popover open for continued selection, but clear search
-    setLocationSearchValue("");
-    // Optionally close if only one selection is desired at a time for search, but not for multi-select
-    // setLocationSelectOpen(false);
-  };
+    })
+    setLocationSearchValue("")
+  }
 
-  // Function to remove a selected badge
   const removeLocationBadge = (locationToRemove: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      preferredLocations: prev.preferredLocations.filter(loc => loc !== locationToRemove),
-    }));
-  };
-
+      preferredLocations: prev.preferredLocations.filter((loc) => loc !== locationToRemove),
+    }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setModalError(null);
+    e.preventDefault()
+    setModalError(null)
 
     if (!formData.name || !formData.primaryPhone || !formData.primaryEmail) {
-      const msg = 'Please fill in all required fields: Full Name, Primary Phone, Primary Email.';
-      setModalError(msg);
-      toast.error(msg);
-      return;
+      const msg = "Please fill in all required fields: Full Name, Primary Phone, Primary Email."
+      setModalError(msg)
+      toast.error(msg)
+      return
     }
 
-    const existingLeadWithPhone = existingLeads.find(
-      (lead) => lead.primaryPhone === formData.primaryPhone
-    );
+    const existingLeadWithPhone = existingLeads.find((lead) => lead.primaryPhone === formData.primaryPhone)
 
     if (existingLeadWithPhone) {
-      const msg = `A lead with the primary phone number "${formData.primaryPhone}" is already registered under "${existingLeadWithPhone.name}".`;
-      setModalError(msg);
-      toast.error(msg);
-      return;
+      const msg = `A lead with the primary phone number "${formData.primaryPhone}" is already registered under "${existingLeadWithPhone.name}".`
+      setModalError(msg)
+      toast.error(msg)
+      return
     }
 
-    setIsSubmitting(true);
+    setIsSubmitting(true)
     try {
-      let finalAssignedAgent = formData.assignedAgent;
+      let finalAssignedAgent = formData.assignedAgent
 
-      if (user?.role === 'agent' && !canAssignLeads) {
-        finalAssignedAgent = user.id;
-      } else if (formData.assignedAgent === 'unassigned' || formData.assignedAgent === '') {
-        finalAssignedAgent = '';
+      if (user?.role === "agent" && !canAssignLeads) {
+        finalAssignedAgent = user.id
+      } else if (formData.assignedAgent === "unassigned" || formData.assignedAgent === "") {
+        finalAssignedAgent = ""
       }
 
       const leadToSubmit: NewLeadData = {
         ...formData,
         assignedAgent: finalAssignedAgent,
-        createdBy: user?.id || 'system',
-      };
+        createdBy: user?.id || "system",
+        receivedDate: formData.receivedDate ? parseDDMMYYYY(formData.receivedDate) || new Date() : new Date(),
+      }
 
-      await onAddLead(leadToSubmit);
-      onOpenChange(false);
+      await onAddLead(leadToSubmit)
+      onOpenChange(false)
     } catch (error) {
-      console.error('Failed to add lead:', error);
-      const msg = `Failed to add lead: ${(error as Error).message || 'Unknown error'}. Please try again.`;
-      setModalError(msg);
-      toast.error(msg);
+      console.error("Failed to add lead:", error)
+      const msg = `Failed to add lead: ${(error as Error).message || "Unknown error"}. Please try again.`
+      setModalError(msg)
+      toast.error(msg)
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
-  const canAssignLeads = permissionService.canAssignLeads(user);
+  const canAssignLeads = permissionService.canAssignLeads(user)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Lead</DialogTitle>
-          <DialogDescription>
-            Create a new lead record with all the essential information.
-          </DialogDescription>
+          <DialogDescription>Create a new lead record with all the essential information.</DialogDescription>
         </DialogHeader>
 
         {modalError && (
@@ -250,7 +236,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                   required
                 />
               </div>
@@ -261,10 +247,10 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                   id="primaryPhone"
                   type="tel"
                   value={formData.primaryPhone}
-                  onChange={(e) => handlePhoneChange('primaryPhone', e.target.value)}
+                  onChange={(e) => handlePhoneChange("primaryPhone", e.target.value)}
                   placeholder="+91XXXXXXXXXX"
                   required
-                  className={modalError && modalError.includes('phone number already exists') ? 'border-red-500' : ''}
+                  className={modalError && modalError.includes("phone number already exists") ? "border-red-500" : ""}
                 />
                 <p className="text-xs text-gray-500 mt-1">Format: +91XXXXXXXXXX</p>
               </div>
@@ -275,7 +261,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                   id="secondaryPhone"
                   type="tel"
                   value={formData.secondaryPhone}
-                  onChange={(e) => handlePhoneChange('secondaryPhone', e.target.value)}
+                  onChange={(e) => handlePhoneChange("secondaryPhone", e.target.value)}
                   placeholder="+91XXXXXXXXXX"
                 />
               </div>
@@ -286,7 +272,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                   id="primaryEmail"
                   type="email"
                   value={formData.primaryEmail}
-                  onChange={(e) => setFormData(prev => ({ ...prev, primaryEmail: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, primaryEmail: e.target.value }))}
                   required
                 />
               </div>
@@ -297,8 +283,21 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                   id="secondaryEmail"
                   type="email"
                   value={formData.secondaryEmail}
-                  onChange={(e) => setFormData(prev => ({ ...prev, secondaryEmail: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, secondaryEmail: e.target.value }))}
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="receivedDate">Received Date * (DD-MM-YYYY)</Label>
+                <Input
+                  id="receivedDate"
+                  type="text"
+                  placeholder="DD-MM-YYYY"
+                  value={formData.receivedDate}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, receivedDate: e.target.value }))}
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Format: DD-MM-YYYY (e.g., 15-01-2024)</p>
               </div>
             </div>
 
@@ -308,7 +307,9 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                 <Label htmlFor="propertyType">Property Type</Label>
                 <Select
                   value={formData.propertyType}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, propertyType: value as Lead['propertyType'] }))}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({ ...prev, propertyType: value as Lead["propertyType"] }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -325,15 +326,19 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                 <Label htmlFor="budgetRange">Budget Range (INR)</Label>
                 <Select
                   value={formData.budgetRange}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, budgetRange: value === 'none' ? '' : value }))}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({ ...prev, budgetRange: value === "none" ? "" : value }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select budget range" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Select budget range</SelectItem>
-                    {budgetRanges.map(range => (
-                      <SelectItem key={range} value={range}>{range}</SelectItem>
+                    {budgetRanges.map((range) => (
+                      <SelectItem key={range} value={range}>
+                        {range}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -343,7 +348,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                 <Label htmlFor="source">Lead Source</Label>
                 <Select
                   value={formData.source}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, source: value as Lead['source'] }))}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, source: value as Lead["source"] }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -364,8 +369,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                 <Label htmlFor="leadType">Lead Type *</Label>
                 <Select
                   value={formData.leadType}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, leadType: value as Lead['leadType'] }))}
-                  required
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, leadType: value as Lead["leadType"] }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select lead type" />
@@ -377,14 +381,15 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                 </Select>
               </div>
 
-
               {/* Agent assignment - different behavior for admins vs agents */}
               {canAssignLeads && (
                 <div>
                   <Label htmlFor="assignedAgent">Assigned Agent</Label>
                   <Select
-                    value={formData.assignedAgent || 'unassigned'}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, assignedAgent: value === 'unassigned' ? '' : value }))}
+                    value={formData.assignedAgent || "unassigned"}
+                    onValueChange={(value) =>
+                      setFormData((prev) => ({ ...prev, assignedAgent: value === "unassigned" ? "" : value }))
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select agent" />
@@ -392,28 +397,30 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                     <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
                       {loadingAgents ? (
-                        <SelectItem value="loading" disabled>Loading agents...</SelectItem>
+                        <SelectItem value="loading" disabled>
+                          Loading agents...
+                        </SelectItem>
                       ) : (
-                        availableAgents.map(agent => (
-                          <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
+                        availableAgents.map((agent) => (
+                          <SelectItem key={agent.id} value={agent.id}>
+                            {agent.name}
+                          </SelectItem>
                         ))
                       )}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-gray-500 mt-1">
-                    {loadingAgents ? 'Loading...' : `${availableAgents.length} agent(s) available from database`}
+                    {loadingAgents ? "Loading..." : `${availableAgents.length} agent(s) available from database`}
                   </p>
                 </div>
               )}
 
               {/* For agents, show info that lead will be auto-assigned to them */}
-              {user?.role === 'agent' && !canAssignLeads && (
+              {user?.role === "agent" && !canAssignLeads && (
                 <div>
                   <Label>Assignment</Label>
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800">
-                      This lead will be automatically assigned to you.
-                    </p>
+                    <p className="text-sm text-blue-800">This lead will be automatically assigned to you.</p>
                   </div>
                 </div>
               )}
@@ -422,7 +429,7 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                 <Label htmlFor="leadScore">Lead Priority</Label>
                 <Select
                   value={formData.leadScore}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, leadScore: value as Lead['leadScore'] }))}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, leadScore: value as Lead["leadScore"] }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -439,25 +446,27 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
 
           {/* Preferred Locations - NOW THE MULTI-SELECT SEARCHABLE COMBOBOX */}
           <div>
-            <Label htmlFor="preferred-locations-search" className="text-sm font-medium">Preferred Locations</Label>
+            <Label htmlFor="preferred-locations-search" className="text-sm font-medium">
+              Preferred Locations
+            </Label>
             <Popover open={locationSelectOpen} onOpenChange={setLocationSelectOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   role="combobox"
                   aria-expanded={locationSelectOpen}
-                  className="w-full justify-between mt-2 h-auto min-h-10 px-3 py-2" // Adjust height for tags
+                  className="w-full justify-between mt-2 h-auto min-h-10 px-3 py-2 bg-transparent"
                 >
                   <div className="flex flex-wrap gap-1 items-center">
                     {formData.preferredLocations.length > 0 ? (
-                      formData.preferredLocations.map(location => (
+                      formData.preferredLocations.map((location) => (
                         <Badge key={location} className="flex items-center gap-1 pr-1">
                           {location}
                           <XCircle
                             className="h-3 w-3 cursor-pointer text-gray-500 hover:text-red-500 transition-colors"
                             onClick={(e) => {
-                              e.stopPropagation(); // Prevent opening popover when clicking X
-                              removeLocationBadge(location);
+                              e.stopPropagation()
+                              removeLocationBadge(location)
                             }}
                           />
                         </Badge>
@@ -476,28 +485,28 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
                     value={locationSearchValue}
                     onValueChange={setLocationSearchValue}
                   />
-                  <CommandEmpty>No location found.</CommandEmpty>
-                  <CommandGroup>
-                    {locations
-                      .filter(location =>
-                        location.toLowerCase().includes(locationSearchValue.toLowerCase())
-                      )
-                      .map((location) => (
-                        <CommandItem
-                          key={location}
-                          value={location} // CommandItem uses 'value' for filtering
-                          onSelect={() => handlePreferredLocationSelect(location)}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              formData.preferredLocations.includes(location) ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          {location}
-                        </CommandItem>
-                      ))}
-                  </CommandGroup>
+                  <CommandList>
+                    <CommandEmpty>No location found.</CommandEmpty>
+                    <CommandGroup>
+                      {locations
+                        .filter((location) => location.toLowerCase().includes(locationSearchValue.toLowerCase()))
+                        .map((location) => (
+                          <CommandItem
+                            key={location}
+                            value={location}
+                            onSelect={() => handlePreferredLocationSelect(location)}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                formData.preferredLocations.includes(location) ? "opacity-100" : "opacity-0",
+                              )}
+                            />
+                            {location}
+                          </CommandItem>
+                        ))}
+                    </CommandGroup>
+                  </CommandList>
                 </Command>
               </PopoverContent>
             </Popover>
@@ -510,8 +519,8 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
               id="notes"
               placeholder="Add any additional notes about this lead..."
               value={formData.notes}
-              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-              rows={4}
+              onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
+              rows={3}
             />
           </div>
 
@@ -520,11 +529,11 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
               Cancel
             </Button>
             <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding...' : 'Add Lead'}
+              {isSubmitting ? "Adding Lead..." : "Add Lead"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

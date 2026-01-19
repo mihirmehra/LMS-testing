@@ -3,12 +3,14 @@
 import { getDatabase } from "@/lib/mongodb"
 import type { Lead, Activity } from "@/types/lead"
 import { ObjectId } from "mongodb"
+import { parseDDMMYYYY } from "@/lib/dateUtils"
 
 interface CsvLeadData {
   name: string
   email: string
   phone: string
   "date received"?: string
+  "received date"?: string // Added alternative column name for received date
   createdat?: string
   "property type"?: string
   "budget range"?: string
@@ -86,6 +88,8 @@ export class LeadsAPI {
           updatedAt: new Date(updatedAt),
           lastContacted: lastContacted ? new Date(lastContacted) : undefined,
           dateAssignedToSales: lead.dateAssignedToSales ? new Date(lead.dateAssignedToSales) : undefined,
+          receivedDate: lead.receivedDate ? new Date(lead.receivedDate) : undefined,
+          assignedDate: lead.assignedDate ? new Date(lead.assignedDate) : undefined,
           activities:
             activities?.map(
               (activity: any) =>
@@ -122,6 +126,8 @@ export class LeadsAPI {
         updatedAt: new Date(lead.updatedAt),
         lastContacted: lead.lastContacted ? new Date(lead.lastContacted) : undefined,
         dateAssignedToSales: lead.dateAssignedToSales ? new Date(lead.dateAssignedToSales) : undefined,
+        receivedDate: lead.receivedDate ? new Date(lead.receivedDate) : undefined,
+        assignedDate: lead.assignedDate ? new Date(lead.assignedDate) : undefined,
         activities:
           lead.activities?.map(
             (activity: any) =>
@@ -145,6 +151,7 @@ export class LeadsAPI {
     leadData: Omit<Lead, "id" | "createdAt" | "updatedAt" | "lastContacted" | "activities" | "attachments"> & {
       activities?: any[]
       attachments?: string[]
+      receivedDate?: Date | string // Allow receivedDate in creation
     },
   ): Promise<Lead> {
     try {
@@ -156,6 +163,10 @@ export class LeadsAPI {
         throw new Error("leadType is required when creating a lead.")
       }
 
+      const receivedDate = leadData.receivedDate ? new Date(leadData.receivedDate) : now
+
+      const assignedDate = leadData.assignedAgent ? now : undefined
+
       const newLeadDocument = {
         ...leadData,
         notes: leadData.notes || "",
@@ -164,6 +175,8 @@ export class LeadsAPI {
         createdAt: now,
         updatedAt: now,
         lastContacted: undefined, // New leads typically don't have a lastContacted date initially
+        receivedDate: receivedDate, // Set receivedDate
+        assignedDate: assignedDate, // Set assignedDate if agent assigned
       }
 
       const result = await collection.insertOne(newLeadDocument)
@@ -186,6 +199,12 @@ export class LeadsAPI {
       }
       if ((createdLead as any).dateAssignedToSales) {
         ;(createdLead as any).dateAssignedToSales = new Date((createdLead as any).dateAssignedToSales)
+      }
+      if (createdLead.receivedDate) {
+        createdLead.receivedDate = new Date(createdLead.receivedDate)
+      }
+      if (createdLead.assignedDate) {
+        createdLead.assignedDate = new Date(createdLead.assignedDate)
       }
       createdLead.activities =
         createdLead.activities?.map(
@@ -237,6 +256,12 @@ export class LeadsAPI {
           ? new Date(updateData.dateAssignedToSales)
           : undefined
       }
+      if (updateData.receivedDate !== undefined) {
+        finalUpdatePayload.receivedDate = updateData.receivedDate ? new Date(updateData.receivedDate) : undefined
+      }
+      if (updateData.assignedDate !== undefined) {
+        finalUpdatePayload.assignedDate = updateData.assignedDate ? new Date(updateData.assignedDate) : undefined
+      }
       // Handle array updates if they are part of the `dataToUpdate`
       if (updateData.preferredLocations !== undefined) {
         finalUpdatePayload.preferredLocations = updateData.preferredLocations
@@ -267,6 +292,8 @@ export class LeadsAPI {
         createdAt: new Date(result.value.createdAt),
         updatedAt: new Date(result.value.updatedAt),
         lastContacted: result.value.lastContacted ? new Date(result.value.lastContacted) : undefined,
+        receivedDate: result.value.receivedDate ? new Date(result.value.receivedDate) : undefined,
+        assignedDate: result.value.assignedDate ? new Date(result.value.assignedDate) : undefined,
         activities:
           result.value.activities?.map(
             (activity: any) =>
@@ -345,6 +372,8 @@ export class LeadsAPI {
         createdAt: new Date(result.value.createdAt),
         updatedAt: new Date(result.value.updatedAt),
         lastContacted: result.value.lastContacted ? new Date(result.value.lastContacted) : undefined,
+        receivedDate: result.value.receivedDate ? new Date(result.value.receivedDate) : undefined,
+        assignedDate: result.value.assignedDate ? new Date(result.value.assignedDate) : undefined,
         activities:
           result.value.activities?.map(
             (activity: any) =>
@@ -439,13 +468,20 @@ export class LeadsAPI {
         }
         console.log(`[LeadsAPI] Row ${rowNumber}: Preparing to insert lead:`, newLead.name)
 
-        // Determine createdAt for this row. The import route lowercases keys like 'date received'.
-        let createdAtForRow: Date = now
-        const possibleDateStr = (leadData["date received"] as any) || (leadData["createdat"] as any)
+        let receivedDateForRow: Date = now
+        const possibleDateStr =
+          (leadData["received date"] as any) || (leadData["date received"] as any) || (leadData["createdat"] as any)
         if (possibleDateStr) {
-          const parsed = new Date(possibleDateStr)
-          if (!isNaN(parsed.getTime())) {
-            createdAtForRow = parsed
+          // Try parsing DD-MM-YYYY format first
+          let parsed = parseDDMMYYYY(possibleDateStr as string)
+          
+          // If DD-MM-YYYY parsing fails, try standard Date parsing
+          if (!parsed) {
+            parsed = new Date(possibleDateStr)
+          }
+          
+          if (parsed && !isNaN(parsed.getTime())) {
+            receivedDateForRow = parsed
           }
         }
 
@@ -453,8 +489,10 @@ export class LeadsAPI {
           ...newLead,
           activities: [],
           attachments: [],
-          createdAt: createdAtForRow,
-          updatedAt: createdAtForRow,
+          createdAt: now,
+          updatedAt: now,
+          receivedDate: receivedDateForRow, // Set receivedDate from import
+          assignedDate: undefined, // No assignedDate on import (not assigned yet)
         })
 
         if (result.acknowledged) {
