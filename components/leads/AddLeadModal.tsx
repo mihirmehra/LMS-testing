@@ -69,7 +69,9 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
     receivedDate: formatToDDMMYYYY(new Date()), // Default to current date in DD-MM-YYYY format
   }
 
-  const [formData, setFormData] = useState<NewLeadData & { receivedDate: string }>(initialFormData)
+  const [formData, setFormData] = useState<
+    Omit<NewLeadData, "receivedDate"> & { receivedDate: string }
+  >(initialFormData)
 
   useEffect(() => {
     if (open) {
@@ -192,8 +194,20 @@ export function AddLeadModal({ open, onOpenChange, onAddLead, existingLeads }: A
       }
 
       const leadToSubmit: NewLeadData = {
-        ...formData,
+        name: formData.name,
+        primaryPhone: formData.primaryPhone,
+        secondaryPhone: formData.secondaryPhone,
+        primaryEmail: formData.primaryEmail,
+        secondaryEmail: formData.secondaryEmail,
+        propertyType: formData.propertyType,
+        budgetRange: formData.budgetRange,
+        preferredLocations: formData.preferredLocations,
+        source: formData.source,
+        status: formData.status,
         assignedAgent: finalAssignedAgent,
+        notes: formData.notes,
+        leadScore: formData.leadScore,
+        leadType: formData.leadType,
         createdBy: user?.id || "system",
         receivedDate: formData.receivedDate ? parseDDMMYYYY(formData.receivedDate) || new Date() : new Date(),
       }
